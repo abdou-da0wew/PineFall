@@ -5,7 +5,7 @@ An atmospheric, top-down 3D driving game made with React Three Fiber, React, and
 ## Run
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
@@ -95,3 +95,21 @@ The vgpu CLI dependency on the MCP server SDK is overridden to patched 2.x versi
 - `src/renderers.js`: WebGL probing and initial renderer selection
 
 Documentation: https://vgpu.sh/docs
+
+## Portable test commands
+
+Use a current Node.js LTS release (Node 22 recommended), then install the browser test dependencies:
+
+```sh
+npm ci
+npx playwright install --with-deps chromium
+npm test                   # CPU driving, diagnostics, missing-WebGPU recovery
+npm run test:webgl         # R3F / software-WebGL tests
+npm run test:webgpu        # vgpu browser rendering and device-loss recovery
+npm run test:vgpu-node     # Native software-Vulkan scene readback
+npm run check:shader       # Device-backed WGSL validation
+```
+
+Browser suites start and stop their own temporary Vite server on port 4173. No running dev server is required. Set `TEST_PORT` to choose a different port, or `TEST_BASE_URL` to use a server you already run. Screenshots and reports go to git-ignored `artifacts/tests/`; use `TEST_ARTIFACT_DIR` to change that directory. Individual `.mjs` scripts default to the dev server at port 5173 when invoked directly.
+
+The WebGPU suite explicitly enables Chromium software Vulkan for testing; these launch flags configure the test browser only, not a visitor's browser. Native tests need a usable Vulkan or software adapter (`npx vgpu doctor --pretty`).

@@ -4,7 +4,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build"
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node scripts/run-tests.mjs cpu",
+    "test:webgl": "node scripts/run-tests.mjs webgl",
+    "test:webgpu": "node scripts/run-tests.mjs webgpu",
+    "test:vgpu-node": "node test-vgpu-node.mjs",
+    "check:shader": "vgpu check src/vgpu/world.wgsl --require-validation"
   },
   "dependencies": {
     "@react-three/fiber": "^9.0.0",

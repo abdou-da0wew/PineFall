@@ -1,8 +1,9 @@
+import { artifact, testUrl, projectRoot } from './scripts/test-support.mjs';
 import { chromium } from '@playwright/test';
 for(const software of [false,true]){
  const browser=await chromium.launch({headless:true,args:software?['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']:['--no-sandbox','--disable-webgl']});
  const page=await browser.newPage({viewport:{width:1000,height:700}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://localhost:5173');await page.getByRole('button',{name:'START YOUR SHIFT'}).waitFor();
+ await page.goto(testUrl(''));await page.getByRole('button',{name:'START YOUR SHIFT'}).waitFor();
  await page.waitForTimeout(1200);
  console.log(software?'SOFTWARE WEBGL':'NO WEBGL',await page.locator('.compatibility-badge').innerText());
  await page.locator('button[title="Renderer settings"]').click();
