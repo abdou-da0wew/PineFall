@@ -1,0 +1,13 @@
+import { chromium } from '@playwright/test';
+const browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-webgl']});
+const page=await browser.newPage({viewport:{width:1440,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.goto('http://localhost:5173');await page.getByText('2D COMPATIBILITY MODE').waitFor();
+await page.getByRole('button',{name:'START YOUR SHIFT'}).click();await page.keyboard.press('e');await page.waitForTimeout(250);
+console.log('Automatic 2D fallback and parcel pickup:',await page.getByText('▣ Telescope lens').count());
+await page.keyboard.down('w');await page.waitForTimeout(2000);await page.keyboard.up('w');
+console.log('Speed after driving:',await page.locator('.speed').innerText());
+await page.keyboard.down(' ');await page.waitForTimeout(1300);await page.keyboard.up(' ');
+await page.screenshot({path:'/home/user/compatibility-test.png'});
+await page.keyboard.press('Escape');console.log('Pause:',await page.getByText('Take a breather.').count());
+console.log('Runtime errors:',errors);
+await browser.close();

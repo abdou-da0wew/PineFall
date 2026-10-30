@@ -1,0 +1,666 @@
+{
+  "schemaVersion": 1,
+  "entry": "/home/user/pinefall/src/vgpu/world.wgsl",
+  "deps": [
+    "/home/user/pinefall/node_modules/@vgpu/wgsl-std/src/scene/index.wgsl",
+    "/home/user/pinefall/src/vgpu/world.wgsl"
+  ],
+  "diagnostics": [],
+  "validation": {
+    "mode": "require",
+    "attempted": true,
+    "ok": true
+  },
+  "reflection": {
+    "bindings": [
+      {
+        "group": 0,
+        "binding": 0,
+        "name": "camera",
+        "mangledName": "camera",
+        "type": {
+          "kind": "identifier",
+          "name": "Camera",
+          "mangledName": "_vgsl_417bdc07__Camera"
+        },
+        "kind": "buffer",
+        "addressSpace": "uniform",
+        "struct": {
+          "name": "Camera",
+          "mangledName": "_vgsl_417bdc07__Camera",
+          "members": [
+            {
+              "name": "viewProjection",
+              "type": {
+                "kind": "matrix",
+                "columns": 4,
+                "rows": 4,
+                "element": {
+                  "kind": "scalar",
+                  "name": "f32"
+                }
+              }
+            },
+            {
+              "name": "position",
+              "type": {
+                "kind": "vector",
+                "width": 3,
+                "element": {
+                  "kind": "scalar",
+                  "name": "f32"
+                }
+              }
+            },
+            {
+              "name": "time",
+              "type": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            },
+            {
+              "name": "car",
+              "type": {
+                "kind": "vector",
+                "width": 4,
+                "element": {
+                  "kind": "scalar",
+                  "name": "f32"
+                }
+              }
+            }
+          ]
+        },
+        "layout": {
+          "name": "camera",
+          "mangledName": "camera",
+          "layoutMode": "wgsl-host-shareable-v1",
+          "type": {
+            "kind": "identifier",
+            "name": "Camera",
+            "mangledName": "_vgsl_417bdc07__Camera"
+          },
+          "align": 16,
+          "size": 96,
+          "members": [
+            {
+              "name": "viewProjection",
+              "offset": 0,
+              "align": 16,
+              "size": 64,
+              "type": {
+                "kind": "matrix",
+                "columns": 4,
+                "rows": 4,
+                "element": {
+                  "kind": "scalar",
+                  "name": "f32"
+                }
+              },
+              "layout": {
+                "name": "viewProjection",
+                "mangledName": "viewProjection",
+                "layoutMode": "wgsl-host-shareable-v1",
+                "type": {
+                  "kind": "matrix",
+                  "columns": 4,
+                  "rows": 4,
+                  "element": {
+                    "kind": "scalar",
+                    "name": "f32"
+                  }
+                },
+                "align": 16,
+                "size": 64,
+                "stride": 16,
+                "element": {
+                  "name": "viewProjection[]",
+                  "mangledName": "viewProjection[]",
+                  "layoutMode": "wgsl-host-shareable-v1",
+                  "type": {
+                    "kind": "vector",
+                    "width": 4,
+                    "element": {
+                      "kind": "scalar",
+                      "name": "f32"
+                    }
+                  },
+                  "align": 16,
+                  "size": 16
+                }
+              }
+            },
+            {
+              "name": "position",
+              "offset": 64,
+              "align": 16,
+              "size": 12,
+              "type": {
+                "kind": "vector",
+                "width": 3,
+                "element": {
+                  "kind": "scalar",
+                  "name": "f32"
+                }
+              },
+              "layout": {
+                "name": "position",
+                "mangledName": "position",
+                "layoutMode": "wgsl-host-shareable-v1",
+                "type": {
+                  "kind": "vector",
+                  "width": 3,
+                  "element": {
+                    "kind": "scalar",
+                    "name": "f32"
+                  }
+                },
+                "align": 16,
+                "size": 12
+              }
+            },
+            {
+              "name": "time",
+              "offset": 76,
+              "align": 4,
+              "size": 4,
+              "type": {
+                "kind": "scalar",
+                "name": "f32"
+              },
+              "layout": {
+                "name": "time",
+                "mangledName": "time",
+                "layoutMode": "wgsl-host-shareable-v1",
+                "type": {
+                  "kind": "scalar",
+                  "name": "f32"
+                },
+                "align": 4,
+                "size": 4
+              }
+            },
+            {
+              "name": "car",
+              "offset": 80,
+              "align": 16,
+              "size": 16,
+              "type": {
+                "kind": "vector",
+                "width": 4,
+                "element": {
+                  "kind": "scalar",
+                  "name": "f32"
+                }
+              },
+              "layout": {
+                "name": "car",
+                "mangledName": "car",
+                "layoutMode": "wgsl-host-shareable-v1",
+                "type": {
+                  "kind": "vector",
+                  "width": 4,
+                  "element": {
+                    "kind": "scalar",
+                    "name": "f32"
+                  }
+                },
+                "align": 16,
+                "size": 16
+              }
+            }
+          ]
+        },
+        "bindingLayout": {
+          "kind": "buffer",
+          "buffer": {
+            "type": "uniform",
+            "hasDynamicOffset": false,
+            "minBindingSize": 96
+          }
+        }
+      }
+    ],
+    "entryPoints": [
+      {
+        "name": "vs_main",
+        "mangledName": "vs_main",
+        "stage": "vertex",
+        "bindings": [
+          {
+            "group": 0,
+            "binding": 0
+          }
+        ],
+        "samplingPairs": [],
+        "inputs": [
+          {
+            "name": "position",
+            "location": 0,
+            "type": {
+              "kind": "vector",
+              "width": 3,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "normal",
+            "location": 1,
+            "type": {
+              "kind": "vector",
+              "width": 3,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "world0",
+            "location": 3,
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "world1",
+            "location": 4,
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "world2",
+            "location": 5,
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "world3",
+            "location": 6,
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "tint",
+            "location": 7,
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "fs_main",
+        "mangledName": "fs_main",
+        "stage": "fragment",
+        "bindings": [
+          {
+            "group": 0,
+            "binding": 0
+          }
+        ],
+        "samplingPairs": []
+      }
+    ],
+    "overrides": [],
+    "featuresRequired": [],
+    "aliases": [],
+    "structs": [
+      {
+        "name": "Camera",
+        "mangledName": "_vgsl_417bdc07__Camera",
+        "members": [
+          {
+            "name": "viewProjection",
+            "type": {
+              "kind": "matrix",
+              "columns": 4,
+              "rows": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "position",
+            "type": {
+              "kind": "vector",
+              "width": 3,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "time",
+            "type": {
+              "kind": "scalar",
+              "name": "f32"
+            }
+          },
+          {
+            "name": "car",
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "VertexIn",
+        "mangledName": "_vgsl_417bdc07__VertexIn",
+        "members": [
+          {
+            "name": "position",
+            "type": {
+              "kind": "vector",
+              "width": 3,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "normal",
+            "type": {
+              "kind": "vector",
+              "width": 3,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "world0",
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "world1",
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "world2",
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "world3",
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "tint",
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "VertexOut",
+        "mangledName": "_vgsl_417bdc07__VertexOut",
+        "members": [
+          {
+            "name": "clip",
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "normal",
+            "type": {
+              "kind": "vector",
+              "width": 3,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "tint",
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          },
+          {
+            "name": "world",
+            "type": {
+              "kind": "vector",
+              "width": 3,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "hostShareableLayouts": [
+      {
+        "name": "camera",
+        "mangledName": "camera",
+        "layoutMode": "wgsl-host-shareable-v1",
+        "type": {
+          "kind": "identifier",
+          "name": "Camera",
+          "mangledName": "_vgsl_417bdc07__Camera"
+        },
+        "align": 16,
+        "size": 96,
+        "members": [
+          {
+            "name": "viewProjection",
+            "offset": 0,
+            "align": 16,
+            "size": 64,
+            "type": {
+              "kind": "matrix",
+              "columns": 4,
+              "rows": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            },
+            "layout": {
+              "name": "viewProjection",
+              "mangledName": "viewProjection",
+              "layoutMode": "wgsl-host-shareable-v1",
+              "type": {
+                "kind": "matrix",
+                "columns": 4,
+                "rows": 4,
+                "element": {
+                  "kind": "scalar",
+                  "name": "f32"
+                }
+              },
+              "align": 16,
+              "size": 64,
+              "stride": 16,
+              "element": {
+                "name": "viewProjection[]",
+                "mangledName": "viewProjection[]",
+                "layoutMode": "wgsl-host-shareable-v1",
+                "type": {
+                  "kind": "vector",
+                  "width": 4,
+                  "element": {
+                    "kind": "scalar",
+                    "name": "f32"
+                  }
+                },
+                "align": 16,
+                "size": 16
+              }
+            }
+          },
+          {
+            "name": "position",
+            "offset": 64,
+            "align": 16,
+            "size": 12,
+            "type": {
+              "kind": "vector",
+              "width": 3,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            },
+            "layout": {
+              "name": "position",
+              "mangledName": "position",
+              "layoutMode": "wgsl-host-shareable-v1",
+              "type": {
+                "kind": "vector",
+                "width": 3,
+                "element": {
+                  "kind": "scalar",
+                  "name": "f32"
+                }
+              },
+              "align": 16,
+              "size": 12
+            }
+          },
+          {
+            "name": "time",
+            "offset": 76,
+            "align": 4,
+            "size": 4,
+            "type": {
+              "kind": "scalar",
+              "name": "f32"
+            },
+            "layout": {
+              "name": "time",
+              "mangledName": "time",
+              "layoutMode": "wgsl-host-shareable-v1",
+              "type": {
+                "kind": "scalar",
+                "name": "f32"
+              },
+              "align": 4,
+              "size": 4
+            }
+          },
+          {
+            "name": "car",
+            "offset": 80,
+            "align": 16,
+            "size": 16,
+            "type": {
+              "kind": "vector",
+              "width": 4,
+              "element": {
+                "kind": "scalar",
+                "name": "f32"
+              }
+            },
+            "layout": {
+              "name": "car",
+              "mangledName": "car",
+              "layoutMode": "wgsl-host-shareable-v1",
+              "type": {
+                "kind": "vector",
+                "width": 4,
+                "element": {
+                  "kind": "scalar",
+                  "name": "f32"
+                }
+              },
+              "align": 16,
+              "size": 16
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "wgsl": "// vgsl-module: /home/user/pinefall/src/vgpu/world.wgsl\nstruct _vgsl_417bdc07__Camera {\n  viewProjection: mat4x4f,\n  position: vec3f,\n  time: f32,\n  car: vec4f,\n}\n@group(0) @binding(0) var<uniform> camera: _vgsl_417bdc07__Camera;\nstruct _vgsl_417bdc07__VertexIn {\n  @location(0) position: vec3f,\n  @location(1) normal: vec3f,\n  @location(3) world0: vec4f,\n  @location(4) world1: vec4f,\n  @location(5) world2: vec4f,\n  @location(6) world3: vec4f,\n  @location(7) tint: vec4f,\n}\nstruct _vgsl_417bdc07__VertexOut {\n  @builtin(position) clip: vec4f,\n  @location(0) normal: vec3f,\n  @location(1) tint: vec4f,\n  @location(2) world: vec3f,\n}\n@vertex fn vs_main(input: _vgsl_417bdc07__VertexIn) -> _vgsl_417bdc07__VertexOut {\n  let model = _vgsl_b5f1cd4c__instanceWorldMatrix(input.world0, input.world1, input.world2, input.world3);\n  var out: _vgsl_417bdc07__VertexOut;\n  out.world = _vgsl_b5f1cd4c__transformPosition(model, input.position);\n  out.clip = camera.viewProjection * vec4f(out.world, 1.0);\n  out.normal = _vgsl_b5f1cd4c__transformNormal(model, input.normal);\n  out.tint = input.tint;\n  return out;\n}\n@fragment fn fs_main(input: _vgsl_417bdc07__VertexOut) -> @location(0) vec4f {\n  let normal = normalize(input.normal);\n  let sun = max(dot(normal, normalize(vec3f(-0.5,0.8,0.3))),0.0);\n  var rgb = input.tint.rgb * (vec3f(0.44,0.55,0.6) + sun*vec3f(0.65,0.57,0.42));\n  // Warm lamp pools and vehicle headlights are calculated in world space.\n  let lamps = array<vec2f,12>(vec2f(-5,29),vec2f(5,4),vec2f(-5,-29),vec2f(-31,-5),vec2f(31,5),vec2f(-41,26),vec2f(41,-26),vec2f(29,41),vec2f(-28,-41),vec2f(-41,-28),vec2f(41,29),vec2f(26,-41));\n  var warmth = 0.0;\n  for(var i=0u;i<12u;i++) {\n    let delta = input.world - vec3f(lamps[i].x+1.2,4.5,lamps[i].y);\n    warmth += 3.0 / (1.0 + dot(delta,delta)) * max(normal.y,0.0);\n  }\n  let delta = input.world.xz - camera.car.xy;\n  let heading = vec2f(-sin(camera.car.z),-cos(camera.car.z));\n  let forward = dot(delta,heading);\n  let sideways = abs(delta.x*heading.y-delta.y*heading.x);\n  let cone = (1.0-smoothstep(forward*0.26+0.7,forward*0.5+1.0,sideways))*smoothstep(1.0,2.2,forward)*(1.0-smoothstep(9.0,22.0,forward));\n  warmth += cone*0.55*max(normal.y,0.0)*(1.0-smoothstep(0.0,2.2,input.world.y));\n  rgb += input.tint.rgb*vec3f(1.0,0.77,0.38)*warmth;\n  rgb = mix(rgb,input.tint.rgb*1.25,clamp(input.tint.a,0.0,1.0));\n  let fog = smoothstep(48.0,115.0,distance(input.world,camera.position))*0.65;\n  rgb = mix(rgb,vec3f(0.21,0.31,0.33),fog);\n  return vec4f(clamp(rgb,vec3f(0),vec3f(1)),1.0);\n}\n\n// vgsl-module: /home/user/pinefall/node_modules/@vgpu/wgsl-std/src/scene/index.wgsl\nfn _vgsl_b5f1cd4c__instanceWorldMatrix(world0: vec4f, world1: vec4f, world2: vec4f, world3: vec4f) -> mat4x4f {\n  return mat4x4f(world0, world1, world2, world3);\n}\n\n fn _vgsl_b5f1cd4c__transformPosition(world: mat4x4f, position: vec3f) -> vec3f {\n  return (world * vec4f(position, 1.0)).xyz;\n}\n\n \n\n fn _vgsl_b5f1cd4c__transformNormal(world: mat4x4f, normal: vec3f) -> vec3f {\n  let linear0 = world[0].xyz;\n  let linear1 = world[1].xyz;\n  let linear2 = world[2].xyz;\n  let normalMagnitude = abs(normal);\n  let normalScale = max(max(normalMagnitude.x, normalMagnitude.y), normalMagnitude.z);\n  if (normalScale == 0.0) {\n    return vec3f(0.0);\n  }\n\n  let linearMagnitude = max(max(abs(linear0), abs(linear1)), abs(linear2));\n  let linearScale = max(max(linearMagnitude.x, linearMagnitude.y), linearMagnitude.z);\n  if (linearScale == 0.0) {\n    return vec3f(0.0);\n  }\n\n  let scaled0 = linear0 / linearScale;\n  let scaled1 = linear1 / linearScale;\n  let scaled2 = linear2 / linearScale;\n  let cofactor0 = cross(scaled1, scaled2);\n  let cofactor1 = cross(scaled2, scaled0);\n  let cofactor2 = cross(scaled0, scaled1);\n  let determinant = dot(scaled0, cofactor0);\n  if (determinant == 0.0) {\n    return vec3f(0.0);\n  }\n\n  let scaledNormal = normal / normalScale;\n  let cofactorNormal = scaledNormal.x * cofactor0 + scaledNormal.y * cofactor1 + scaledNormal.z * cofactor2;\n  let cofactorMagnitude = abs(cofactorNormal);\n  let cofactorScale = max(max(cofactorMagnitude.x, cofactorMagnitude.y), cofactorMagnitude.z);\n  if (cofactorScale == 0.0) {\n    return vec3f(0.0);\n  }\n\n  let scaledCofactorNormal = cofactorNormal / cofactorScale;\n  let result = scaledCofactorNormal * inverseSqrt(dot(scaledCofactorNormal, scaledCofactorNormal));\n  if (determinant < 0.0) {\n    return -result;\n  }\n  return result;\n}\n"
+}
