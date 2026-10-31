@@ -72,6 +72,41 @@ try {
       heapGrowthBytes: finalHeap.usedSize - initialHeap.usedSize,
     });
     await page.locator('button[title="Renderer settings"]').click();
+    await expect(page.getByRole("region", { name: "Desktop GPU settings" })).toBeVisible();
+    const applyButton = page.getByRole("button", { name: "APPLY PROFILE & RESTART" });
+    await expect(applyButton).toBeDisabled();
+    await page.getByRole("radio", { name: /^Linux GPU · OpenGL/ }).check();
+    await expect(applyButton).toBeEnabled();
+    await application.evaluate(({ dialog }) => {
+      dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
+    });
+    await applyButton.click();
+    await expect(
+      page.getByText("Restart canceled. Your running profile is unchanged."),
+    ).toBeVisible();
+    expect(await page.evaluate(() => window.pinefallDesktop?.runtime.mode)).toBe("compatibility");
+    await page.getByRole("radio", { name: /^Linux GPU · bypass/ }).check();
+    await expect(page.getByText(/Warning: bypassing the blocklist/)).toBeVisible();
+    await page.getByText("Selected profile: backend, display and flags").click();
+    await expect(page.locator(".desktop-flags")).toContainText("--ignore-gpu-blocklist");
+    await page.getByRole("button", { name: /Render quality: Pixel/ }).click();
+    await expect(page.getByRole("button", { name: /Render quality: Crisp/ })).toBeVisible();
+    await page.getByRole("button", { name: /Render quality: Crisp/ }).click();
+    const uiReport = artifact("desktop-ui-diagnostics.json");
+    await application.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+    }, uiReport);
+    await page.getByRole("button", { name: "EXPORT GPU DIAGNOSTICS" }).click();
+    await expect(
+      page.getByText("Diagnostics saved. Review the JSON before sharing it."),
+    ).toBeVisible();
+    expect(await Bun.file(uiReport).exists()).toBe(true);
+    await page.getByRole("radio", { name: /^CPU Compatibility/ }).check();
+    await expect(applyButton).toBeDisabled();
+    await page
+      .getByRole("region", { name: "Desktop GPU settings" })
+      .screenshot({ path: artifact("desktop-graphics-settings.png") });
+
     await page.getByRole("button", { name: /^R3F WebGL/ }).click();
     await expect(page.getByText(/Desktop Compatibility Mode disables GPU/)).toBeVisible();
     await page.getByRole("button", { name: /^vgpu · WebGPU/ }).click();

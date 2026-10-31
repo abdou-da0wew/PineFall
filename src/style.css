@@ -1050,3 +1050,121 @@ kbd {
 .desktop-compatibility .grain {
   display: none;
 }
+
+.desktop-graphics {
+  border: 1px solid #c4d2b72b;
+  border-radius: 8px;
+  padding: 18px;
+  margin: 20px 0;
+  background: #10212680;
+}
+.desktop-graphics fieldset {
+  border: 0;
+  padding: 0;
+  margin: 16px 0;
+  min-width: 0;
+}
+.desktop-graphics legend {
+  font-size: 12px;
+  margin-bottom: 10px;
+  color: #e2c189;
+}
+.desktop-profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.desktop-profile-grid label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid #c4d2b72b;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.desktop-profile-grid label.selected {
+  border-color: #e2c189;
+  background: #e2c18912;
+}
+.desktop-profile-grid label:has(input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.desktop-profile-grid input {
+  margin-top: 3px;
+  accent-color: #e2c189;
+  flex-shrink: 0;
+}
+.desktop-profile-grid strong {
+  display: block;
+  font-size: 12px;
+}
+.desktop-profile-grid small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 5px;
+  color: #b5bfab;
+}
+.desktop-profile-details {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.desktop-profile-details dt {
+  color: #e2c189;
+}
+.desktop-profile-details dd {
+  margin: 0;
+}
+.desktop-flags {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.8;
+  padding: 10px;
+  background: #0b191c;
+}
+.desktop-graphics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+.desktop-graphics-actions button,
+.graphics-quality {
+  padding: 12px;
+  border: 1px solid #c4d2b74a;
+  border-radius: 4px;
+  background: #243b39;
+  color: #e9e9d6;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.desktop-graphics-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.graphics-quality {
+  margin: 8px 0 16px;
+}
+.desktop-graphics button:focus-visible,
+.desktop-profile-grid input:focus-visible {
+  outline: 2px solid #e2c189;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .desktop-profile-grid {
+    grid-template-columns: 1fr;
+  }
+  .desktop-profile-details {
+    grid-template-columns: 1fr;
+  }
+  .desktop-profile-details dd {
+    margin-bottom: 8px;
+  }
+}

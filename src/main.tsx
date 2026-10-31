@@ -22,6 +22,7 @@ import type {
 } from "./types";
 import { snapshotGame, errorMessage } from "./types";
 import { STOPS, JOBS, buildings, trees, rocks, lamps, rand } from "./worldData";
+import DesktopGraphicsSettings from "./DesktopGraphicsSettings";
 import CompatibilityWorld from "./CompatibilityWorld";
 const VgpuWorld = React.lazy(() => import("./vgpu/VgpuWorld"));
 import {
@@ -1283,19 +1284,26 @@ function App() {
           >
             <div className="eyebrow">PINEFALL / GRAPHICS LAB</div>
             <h2>A road for every machine.</h2>
-            {window.pinefallDesktop && (
-              <div className="tip">
-                <strong>Desktop: {window.pinefallDesktop.runtime.mode}</strong>
-                <br />
-                Compatibility Mode: CPU Canvas, 30 FPS target, at most 960 × 540 internal pixels.
-                Hardware mode is opt-in from the Graphics menu and requires a restart. Export
-                diagnostics from that menu if your driver glitches.
-              </div>
+            {window.pinefallDesktop ? (
+              <DesktopGraphicsSettings bridge={window.pinefallDesktop} />
+            ) : (
+              <p className="tip">
+                Desktop GPU startup profiles are available in the Electron app. A browser tab cannot
+                change Chromium launch flags; live renderer choices are available below.
+              </p>
             )}
+            <div className="eyebrow">LIVE SETTINGS / NO RESTART</div>
             <p>
-              Keep playing without a dedicated GPU. Auto tries R3F WebGL, then Vercel Labs vgpu
-              (WebGPU), then CPU-compatible Canvas 2D.
+              Switch the scene renderer without losing your shift. Desktop startup profiles still
+              control which GPU backends are allowed. The Linux OpenGL profiles skip WebGPU.
             </p>
+            <button
+              className="graphics-quality"
+              onClick={() => setQuality(quality === "pixel" ? "sharp" : "pixel")}
+            >
+              Render quality: {quality === "pixel" ? "Pixel" : "Crisp"} — switch to{" "}
+              {quality === "pixel" ? "Crisp" : "Pixel"}
+            </button>
             <div className="renderer-options">
               <button onClick={tryAuto}>
                 <strong>Auto</strong>

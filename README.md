@@ -220,3 +220,11 @@ There is no universal 40% Wayland penalty established by this diagnostic output.
 A real Chromium/Mesa patch needs an identified reproducible failure, exact versions, GPU diagnostics and logs. These profiles are application-level backend selection and workload changes, **not driver patches**. The physical CEDAR GPU is not available in the build environment, so on-device validation remains required.
 
 Profile validation: `bun run test:graphics` checks switches, explicit blocklist opt-in, recovery precedence and platform restrictions. `xvfb-run -a bun run test:linux-gpu` checks both real Electron startup profiles and the in-game WebGPU guard. In the build container the normal profile fell back to Canvas and the unblocked profile used software WebGL; neither result validates CEDAR hardware acceleration. No GPU-sandbox bypass is configured by the app; the container test harness alone supplies `--no-sandbox`.
+
+### In-game graphics controls
+
+Open the **Renderer** button in the game to enter Graphics Lab. The Electron app now exposes all four existing desktop profiles there: CPU Compatibility, Chromium-default GPU, Linux OpenGL/X11, and Linux OpenGL/X11 with blocklist bypass. Linux-only options are disabled on Windows. The running profile is shown separately from the pending selection; **Apply profile & restart** requires native confirmation and ends the shift. Canceling keeps the running profile unchanged.
+
+Expand **Selected profile: backend, display and flags** to see exactly what the selected profile requests. These remain bundled profiles, not arbitrary independent Chromium-flag switches. GPU sandbox bypass and physical-adapter selection are not exposed as toggles. **Export GPU diagnostics** is available directly in the same panel. Renderer and Pixel/Crisp quality choices below it apply live without a restart. Desktop surface-size and frame-rate budgets remain fixed and are displayed, not adjustable controls.
+
+The Electron UI regression test covers profile selection, blocklist warnings, canceled restart, live quality changes and a diagnostics export initiated through the in-game button.
