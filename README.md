@@ -180,3 +180,43 @@ The WebGPU suite explicitly enables Chromium software Vulkan for testing; these 
 Validated in the Linux container: strict TypeScript, Oxlint (zero warnings/errors), formatting, production build, browser CPU/WebGL/WebGPU/device-loss suites, staged Electron gameplay/recovery tests, and both the unpacked Linux app and extracted AppImage. Windows ZIP packaging completed; Windows runtime and physical Radeon HD 6350 testing are outstanding. The short Electron CPU cadence measurement was approximately 30 FPS; 20 quality changes retained about 1 MB of additional JavaScript heap after GC. These are smoke-test observations, not a long-duration leak or driver-stability guarantee.
 
 Dependency audit currently reports **one moderate minimatch denial-of-service advisory (GHSA-g3hv-75wg-m249)** in the electron-builder development dependency tree. These packages are not shipped in the desktop ASAR; packaging uses repository-controlled glob patterns. A blanket major-version override would break legacy minimatch consumers, so it has not been forced. Keep the packaging toolchain updated, and do not run it over untrusted build configurations.
+
+## CEDAR Linux GPU profiles (OpenGL, not Vulkan)
+
+The reported `glxinfo` renderer **AMD CEDAR** with direct rendering means that the current GLX client can use the Radeon through Mesa. Vulkan reporting **llvmpipe** describes a CPU Vulkan device; it does not mean OpenGL is CPU-only. It also does not prove Chromium WebGL 2 will succeed. A desktop GL compatibility-profile version alone does not certify every WebGL 2 requirement.
+
+Try **Graphics → Linux GPU · OpenGL / X11** and confirm the restart. The built-in profile requests:
+
+```text
+--use-gl=angle
+--use-angle=gl
+--ozone-platform=x11
+--disable-features=Vulkan
+--disable-accelerated-video-decode
+```
+
+This explicitly selects the ANGLE OpenGL backend, keeps the GPU sandbox and blocklist enabled, and avoids the vgpu/WebGPU path in the game. It requires X11 or working XWayland with `DISPLAY` available. It does not modify your Chromium configuration, Mesa installation, or kernel driver. Chromium switches are requests, not proof of hardware use; accepted backends vary by Electron/Chromium build.
+
+If the regular profile refuses WebGL, try **Linux GPU · OpenGL / X11 · bypass blocklist**. This separately labelled experimental profile also requests `--ignore-gpu-blocklist`. It can expose driver defects that Chromium's blocklist avoids. Neither profile disables the GPU sandbox, disables driver bug workarounds, or claims to patch Chromium. CPU Compatibility remains the first-run/recovery default; selecting a profile in the menu persists it.
+
+One-launch test (fully close the existing app first):
+
+```sh
+./Pinefall-1.0.0-linux-x86_64.AppImage --graphics=linux-opengl
+# Only if the normal profile is refused:
+./Pinefall-1.0.0-linux-x86_64.AppImage --graphics=linux-opengl-unblocked
+# Recovery:
+./Pinefall-1.0.0-linux-x86_64.AppImage --safe-mode
+```
+
+From source, run `bun run desktop:install`, `bun run desktop:prepare`, then `bun scripts/start-desktop.ts --graphics=linux-opengl`. CLI profile overrides apply for that launch; choosing another menu profile clears the CLI override on restart.
+
+**Verify, don't infer:** open in-game Renderer settings. An ANGLE/OpenGL renderer naming AMD CEDAR is the expected hardware result. `llvmpipe`, `softpipe`, or `SwiftShader` means CPU software rendering. An unavailable/unexposed adapter identity is not proof either way. The desktop diagnostics export includes complete Electron GPU information, the profile's requested switches, and selected display/PRIME environment variables. `app.isHardwareAccelerationEnabled()` alone only describes the application setting, not the actual GPU used.
+
+`DRI_PRIME=0` means the default Mesa device, **not necessarily Intel**. `i915` being loaded does not identify the GPU Chromium selected. Use `lspci -nnk | grep -EA3 'VGA|3D|Display'` to identify devices (the earlier `VEA` pattern is a typo). Compare `glxinfo -B` with an explicitly chosen Mesa `DRI_PRIME` PCI selector before launching the game with the same environment. Do not guess PCI addresses or assume ordinal 1 is AMD. A GLX test still does not guarantee ANGLE will select the same adapter: verify in game.
+
+There is no universal 40% Wayland penalty established by this diagnostic output. X11/XWayland is an A/B test, not a universal cure. Likewise, `--disable-gpu --disable-software-rasterizer` is not a guarantee of a fully working software game: it disables GPU acceleration and a software 3D fallback. Windows may behave differently because Chromium can use ANGLE/D3D and a different driver stack; that is not proof Windows is glitch-free on this card.
+
+A real Chromium/Mesa patch needs an identified reproducible failure, exact versions, GPU diagnostics and logs. These profiles are application-level backend selection and workload changes, **not driver patches**. The physical CEDAR GPU is not available in the build environment, so on-device validation remains required.
+
+Profile validation: `bun run test:graphics` checks switches, explicit blocklist opt-in, recovery precedence and platform restrictions. `xvfb-run -a bun run test:linux-gpu` checks both real Electron startup profiles and the in-game WebGPU guard. In the build container the normal profile fell back to Canvas and the unblocked profile used software WebGL; neither result validates CEDAR hardware acceleration. No GPU-sandbox bypass is configured by the app; the container test harness alone supplies `--no-sandbox`.

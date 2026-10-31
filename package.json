@@ -24,7 +24,9 @@
     "desktop:windows": "bun run desktop:prepare && bun scripts/package-desktop.ts windows",
     "desktop:unpacked": "bun run desktop:prepare && bun scripts/package-desktop.ts dir",
     "test:desktop": "bun test-desktop.ts",
-    "test:desktop-package": "bun test-desktop-package.ts"
+    "test:desktop-package": "bun test-desktop-package.ts",
+    "test:graphics": "bun test ./test-graphics-profile.ts",
+    "test:linux-gpu": "bun test-linux-opengl.ts"
   },
   "dependencies": {
     "@fontsource/dm-sans": "5.3.0",

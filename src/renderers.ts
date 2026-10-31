@@ -1,4 +1,9 @@
 import type { RendererInfo, RendererMode } from "./types";
+export function legacyOpenGLDesktop() {
+  const mode = window.pinefallDesktop?.runtime.mode;
+  return mode === "linux-opengl" || mode === "linux-opengl-unblocked";
+}
+
 import * as THREE from "three";
 
 // Performance caveats are allowed: SwiftShader, llvmpipe and virtual adapters
@@ -78,7 +83,7 @@ export function initialRenderer(): { mode: RendererMode; info: RendererInfo } {
   if (window.pinefallDesktop?.runtime.mode === "compatibility")
     return { mode: "2d", info: CPU_INFO };
   const forced = new URLSearchParams(location.search).get("renderer");
-  if (forced === "vgpu")
+  if (forced === "vgpu" && !legacyOpenGLDesktop())
     return {
       mode: "vgpu",
       info: { kind: "vgpu · initializing WebGPU", name: "Requesting adapter…", software: false },
@@ -86,7 +91,7 @@ export function initialRenderer(): { mode: RendererMode; info: RendererInfo } {
   if (forced === "cpu" || forced === "2d") return { mode: "2d", info: CPU_INFO };
   const result = probeRenderer();
   if (result.available) return { mode: "3d", info: result.info };
-  if (navigator.gpu)
+  if (navigator.gpu && !legacyOpenGLDesktop())
     return {
       mode: "vgpu",
       info: {

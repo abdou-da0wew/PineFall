@@ -1,4 +1,4 @@
-export type GraphicsMode = "compatibility" | "hardware";
+export type GraphicsMode = "compatibility" | "hardware" | "linux-opengl" | "linux-opengl-unblocked";
 export interface DesktopRuntime {
   mode: GraphicsMode;
   platform: string;

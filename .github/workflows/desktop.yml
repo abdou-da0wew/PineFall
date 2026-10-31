@@ -22,10 +22,13 @@ jobs:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - run: bun run test:graphics
       - run: bun run desktop:install
       - run: bun run desktop:prepare
       - if: runner.os == 'Linux'
         run: xvfb-run -a bun run test:desktop
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a bun run test:linux-gpu
       - run: bun scripts/package-desktop.ts ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:

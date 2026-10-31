@@ -26,6 +26,7 @@ import CompatibilityWorld from "./CompatibilityWorld";
 const VgpuWorld = React.lazy(() => import("./vgpu/VgpuWorld"));
 import {
   initialRenderer,
+  legacyOpenGLDesktop,
   probeRenderer,
   inspectContext,
   createCompatibleRenderer,
@@ -652,12 +653,18 @@ function App() {
   function safeDesktop(): boolean {
     if (window.pinefallDesktop?.runtime.mode !== "compatibility") return false;
     setRendererNote(
-      "Desktop Compatibility Mode disables GPU acceleration. Use Graphics → Hardware in the desktop menu to opt in and restart. This is not recommended for Radeon HD 6350-class drivers.",
+      "Desktop Compatibility Mode disables GPU acceleration. Use Graphics → Linux GPU · OpenGL / X11 on Linux, or Hardware on Windows, then restart. Check the actual adapter after switching.",
     );
     return true;
   }
   function tryVgpu() {
     if (safeDesktop()) return;
+    if (legacyOpenGLDesktop()) {
+      setRendererNote(
+        "The Linux OpenGL profile intentionally skips WebGPU: Vulkan on your CEDAR system reports CPU llvmpipe. Use R3F WebGL and verify its adapter below.",
+      );
+      return;
+    }
     setBackend({
       kind: "vgpu · initializing WebGPU",
       name: "Requesting adapter and pre-warming pipelines…",
@@ -693,7 +700,7 @@ function App() {
       setRendererKey((n) => n + 1);
       setRenderer("3d");
       setRendererNote("Auto selected R3F WebGL.");
-    } else if (navigator.gpu) {
+    } else if (navigator.gpu && !legacyOpenGLDesktop()) {
       tryVgpu();
     } else {
       useCpuRenderer();
@@ -724,7 +731,7 @@ function App() {
     }
   }
   function rendererFailed() {
-    if (navigator.gpu) tryVgpu();
+    if (navigator.gpu && !legacyOpenGLDesktop()) tryVgpu();
     else useCpuRenderer();
   }
   function resetCar() {

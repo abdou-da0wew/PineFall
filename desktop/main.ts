@@ -12,6 +12,13 @@ import {
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { GraphicsMode } from "./contracts";
+import {
+  isGraphicsMode,
+  isLegacyOpenGL,
+  graphicsSwitches,
+  chooseGraphicsMode,
+  restartArgs,
+} from "./graphics";
 
 app.setName("Pinefall");
 const data = app.getPath("userData");
@@ -28,8 +35,13 @@ function log(message: string) {
 function savedMode(): GraphicsMode {
   try {
     const value: unknown = JSON.parse(readFileSync(settingsPath, "utf8"));
-    if (typeof value === "object" && value !== null && "mode" in value && value.mode === "hardware")
-      return "hardware";
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "mode" in value &&
+      isGraphicsMode(value.mode)
+    )
+      return value.mode;
   } catch {}
   return "compatibility";
 }
@@ -37,18 +49,20 @@ function saveMode(mode: GraphicsMode) {
   writeFileSync(settingsPath, JSON.stringify({ mode }, null, 2));
 }
 const recovering = existsSync(bootMarker);
-const forcedSafe = process.argv.includes("--safe-mode");
-const mode: GraphicsMode = forcedSafe || recovering ? "compatibility" : savedMode();
-if (mode === "compatibility") {
-  app.disableHardwareAcceleration();
-  app.commandLine.appendSwitch("disable-gpu");
-  app.commandLine.appendSwitch("disable-gpu-compositing");
-  if (recovering) {
-    saveMode("compatibility");
-    rmSync(bootMarker, { force: true });
-  }
+const mode = chooseGraphicsMode(savedMode(), process.argv, recovering);
+if (mode === "compatibility") app.disableHardwareAcceleration();
+const switches = graphicsSwitches(mode, process.platform);
+for (const [name, value] of switches) {
+  if (name === "disable-features") {
+    const existing = app.commandLine.getSwitchValue(name);
+    app.commandLine.appendSwitch(name, [existing, value].filter(Boolean).join(","));
+  } else app.commandLine.appendSwitch(name, value);
 }
-// Never disable Chromium's driver blocklist or enable unsafe WebGPU globally.
+if (recovering) {
+  saveMode("compatibility");
+  rmSync(bootMarker, { force: true });
+}
+// Sandbox and driver workarounds stay enabled. Only the explicit unblocked profile overrides the blocklist.
 let win: BrowserWindow | null = null;
 let recoveryDialog = false;
 const entry = path.join(app.getAppPath(), "web", "index.html");
@@ -62,15 +76,28 @@ function trusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   );
 }
 async function changeGraphics(next: GraphicsMode) {
+  // Native radio items toggle before their click handler; restore the running state until restart.
+  for (const item of Menu.getApplicationMenu()?.getMenuItemById("graphics-menu")?.submenu?.items ||
+    []) {
+    if (isGraphicsMode(item.id)) item.checked = item.id === mode;
+  }
   if (next === mode) return;
+  if (isLegacyOpenGL(next) && process.platform !== "linux")
+    throw new Error("Linux-only graphics profile");
   const response = await dialog.showMessageBox({
     type: "warning",
     title: "Restart Pinefall?",
-    message: next === "hardware" ? "Try hardware acceleration?" : "Restart in Compatibility Mode?",
+    message: next === "compatibility" ? "Restart in Compatibility Mode?" : `Try ${next}?`,
     detail:
-      next === "hardware"
-        ? "Old Radeon HD 6350/TeraScale drivers may not support current WebGL 2 or WebGPU. This mode is experimental and may glitch or crash. Chromium driver safeguards remain enabled. Restarting ends the current shift."
-        : "This disables hardware acceleration and uses the CPU-compatible renderer. Restarting ends the current shift.",
+      next === "compatibility"
+        ? "Disable GPU acceleration and use CPU Canvas. Restarting ends the shift."
+        : isLegacyOpenGL(next)
+          ? "Use ANGLE OpenGL with X11/XWayland, disable Vulkan and accelerated video decode, and skip the WebGPU backend. X11 or XWayland must be installed and available. The GPU sandbox remains enabled. " +
+            (next === "linux-opengl-unblocked"
+              ? "WARNING: this profile bypasses Chromium’s GPU blocklist; driver crashes or corruption are possible. "
+              : "The GPU blocklist remains enabled. ") +
+            "Hardware use must be verified from the actual adapter shown in Renderer settings. Restarting ends the shift."
+          : "Use Chromium’s default hardware backend and driver safeguards. Restarting ends the shift.",
     buttons: ["Cancel", "Restart"],
     defaultId: 0,
     cancelId: 0,
@@ -78,7 +105,7 @@ async function changeGraphics(next: GraphicsMode) {
   if (response.response !== 1) return;
   saveMode(next);
   rmSync(bootMarker, { force: true });
-  app.relaunch({ args: process.argv.slice(1).filter((arg) => arg !== "--safe-mode") });
+  app.relaunch({ args: restartArgs(process.argv.slice(1)) });
   app.exit(0);
 }
 async function exportDiagnostics() {
@@ -89,9 +116,9 @@ async function exportDiagnostics() {
   });
   if (result.canceled || !result.filePath) return false;
   let gpu: unknown = "Not queried in Compatibility Mode to avoid initializing a graphics adapter.";
-  if (mode === "hardware") {
+  if (mode !== "compatibility") {
     try {
-      gpu = await app.getGPUInfo("basic");
+      gpu = await app.getGPUInfo("complete");
     } catch (error) {
       gpu = String(error);
     }
@@ -103,6 +130,13 @@ async function exportDiagnostics() {
     platform: process.platform,
     arch: process.arch,
     mode,
+    requestedSwitches: Object.fromEntries(switches),
+    session: {
+      type: process.env.XDG_SESSION_TYPE,
+      display: process.env.DISPLAY,
+      waylandDisplay: process.env.WAYLAND_DISPLAY,
+      driPrime: process.env.DRI_PRIME,
+    },
     hardwareAcceleration: app.isHardwareAccelerationEnabled(),
     features: app.getGPUFeatureStatus(),
     gpu,
@@ -116,7 +150,7 @@ async function recover(reason: string) {
   log(reason);
   if (recoveryDialog || !win) return;
   recoveryDialog = true;
-  if (mode === "hardware") saveMode("compatibility");
+  if (mode !== "compatibility") saveMode("compatibility");
   try {
     const answer = await dialog.showMessageBox(win, {
       type: "warning",
@@ -130,7 +164,7 @@ async function recover(reason: string) {
     if (answer.response === 1) {
       saveMode("compatibility");
       app.relaunch({
-        args: [...process.argv.slice(1).filter((a) => a !== "--safe-mode"), "--safe-mode"],
+        args: [...restartArgs(process.argv.slice(1)), "--safe-mode"],
       });
       app.exit(0);
     }
@@ -152,7 +186,7 @@ else {
       log(
         `Starting ${app.getVersion()} in ${mode} mode${recovering ? " (recovered unfinished hardware boot)" : ""}`,
       );
-      if (mode === "hardware") writeFileSync(bootMarker, "pending");
+      if (mode !== "compatibility") writeFileSync(bootMarker, "pending");
       session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
         callback(false),
       );
@@ -213,7 +247,7 @@ else {
       });
       ipcMain.handle("pinefall:graphics", async (event, next: unknown) => {
         if (!trusted(event)) throw new Error("Untrusted IPC sender");
-        if (next !== "compatibility" && next !== "hardware") throw new Error("Invalid mode");
+        if (!isGraphicsMode(next)) throw new Error("Invalid mode");
         await changeGraphics(next);
       });
       ipcMain.handle("pinefall:diagnostics", async (event) => {
@@ -231,21 +265,42 @@ else {
             ],
           },
           {
+            id: "graphics-menu",
             label: "Graphics",
             submenu: [
               {
-                label: "Compatibility · recommended for old Radeon",
+                id: "compatibility",
+                label: "CPU Compatibility · recovery",
                 type: "radio",
                 checked: mode === "compatibility",
                 click: () => void changeGraphics("compatibility"),
               },
               {
-                label: "Hardware · experimental",
+                id: "hardware",
+                label: "Hardware · Chromium default",
                 type: "radio",
                 checked: mode === "hardware",
                 click: () => void changeGraphics("hardware"),
               },
               { type: "separator" },
+              ...(process.platform === "linux"
+                ? [
+                    {
+                      id: "linux-opengl",
+                      label: "Linux GPU · OpenGL / X11",
+                      type: "radio" as const,
+                      checked: mode === "linux-opengl",
+                      click: () => void changeGraphics("linux-opengl"),
+                    },
+                    {
+                      id: "linux-opengl-unblocked",
+                      label: "Linux GPU · OpenGL / X11 · bypass blocklist",
+                      type: "radio" as const,
+                      checked: mode === "linux-opengl-unblocked",
+                      click: () => void changeGraphics("linux-opengl-unblocked"),
+                    },
+                  ]
+                : []),
               { label: "Export diagnostics…", click: () => void exportDiagnostics() },
             ],
           },
@@ -261,7 +316,7 @@ else {
       app.quit();
     });
   app.on("child-process-gone", (_event, details) => {
-    if (details.type === "GPU" && mode === "hardware")
+    if (details.type === "GPU" && mode !== "compatibility")
       void recover(`GPU process exited: ${details.reason}`);
   });
   app.on("window-all-closed", () => app.quit());
