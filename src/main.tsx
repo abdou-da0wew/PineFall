@@ -1,3 +1,4 @@
+import { recordFrame } from "./telemetry";
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
@@ -410,6 +411,7 @@ function Physics({ onUpdate }: { onUpdate: UpdateGame }) {
   const tick = useRef(0);
   const followPosition = useMemo(() => new THREE.Vector3(), []);
   useFrame((_state, delta) => {
+    recordFrame("webgl");
     let dt = Math.min(delta, 0.1);
     let g = game;
     advanceGame(dt);
@@ -627,11 +629,18 @@ function App() {
   const audio = useRef<{ ctx: AudioContext; osc: OscillatorNode; gain: GainNode } | null>(null),
     noteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const notify = (t: string) => {
+    window.pinefallDesktop?.telemetry("action", { action: "game.notice", message: t });
     setNotice(t);
     clearTimeout(noteTimer.current);
     noteTimer.current = setTimeout(() => setNotice(""), 4500);
   };
+  function changeQuality() {
+    const next = quality === "pixel" ? "sharp" : "pixel";
+    window.pinefallDesktop?.telemetry("action", { action: "quality.changed", message: next });
+    setQuality(next);
+  }
   function openRendererSettings() {
+    window.pinefallDesktop?.telemetry("action", { action: "graphics.opened" });
     resumeAfterSettings.current = game.playing && !game.paused;
     game.paused = true;
     game.keys = {};
@@ -688,6 +697,10 @@ function App() {
     window.pinefallDiagnostics?.report("vgpu WebGPU → CPU fallback", error);
   }
   function vgpuReady(info: RendererInfo) {
+    window.pinefallDesktop?.telemetry("renderer", {
+      renderer: "webgpu",
+      message: JSON.stringify(info),
+    });
     setBackend(info);
     setRendererNote(
       "vgpu WebGPU is rendering the 3D world with WGSL, instanced geometry, and shared gameplay.",
@@ -917,6 +930,10 @@ function App() {
               onCreated={({ gl }) => {
                 window.pinefallDesktop?.ready();
                 setBackend(inspectContext(gl.getContext()));
+                window.pinefallDesktop?.telemetry("renderer", {
+                  renderer: "webgl",
+                  message: JSON.stringify(inspectContext(gl.getContext())),
+                });
                 gl.toneMapping = THREE.ACESFilmicToneMapping;
                 gl.toneMappingExposure = 1.1;
                 gl.domElement.addEventListener(
@@ -985,10 +1002,7 @@ function App() {
             {sound ? "♫" : "♩"}
             <span> SOUND {sound ? "ON" : "OFF"}</span>
           </button>
-          <button
-            onClick={() => setQuality((q) => (q === "pixel" ? "sharp" : "pixel"))}
-            title="Change render resolution"
-          >
+          <button onClick={changeQuality} title="Change render resolution">
             ▦<span> {quality === "pixel" ? "PIXEL" : "CRISP"}</span>
           </button>
           <button
@@ -1297,10 +1311,7 @@ function App() {
               Switch the scene renderer without losing your shift. Desktop startup profiles still
               control which GPU backends are allowed. The Linux OpenGL profiles skip WebGPU.
             </p>
-            <button
-              className="graphics-quality"
-              onClick={() => setQuality(quality === "pixel" ? "sharp" : "pixel")}
-            >
+            <button className="graphics-quality" onClick={changeQuality}>
               Render quality: {quality === "pixel" ? "Pixel" : "Crisp"} — switch to{" "}
               {quality === "pixel" ? "Crisp" : "Pixel"}
             </button>

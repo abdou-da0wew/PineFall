@@ -26,7 +26,8 @@
     "test:desktop": "bun test-desktop.ts",
     "test:desktop-package": "bun test-desktop-package.ts",
     "test:graphics": "bun test ./test-graphics-profile.ts",
-    "test:linux-gpu": "bun test-linux-opengl.ts"
+    "test:linux-gpu": "bun test-linux-opengl.ts",
+    "test:observability": "bun test ./test-observability.ts"
   },
   "dependencies": {
     "@fontsource/dm-sans": "5.3.0",

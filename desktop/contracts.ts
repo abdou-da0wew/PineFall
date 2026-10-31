@@ -12,4 +12,18 @@ export interface DesktopBridge {
   ready(): void;
   setGraphicsMode(mode: GraphicsMode): Promise<void>;
   exportDiagnostics(): Promise<boolean>;
+  telemetry(
+    event: "error" | "frames" | "renderer" | "action",
+    fields: Record<string, string | number | boolean | null>,
+  ): void;
+  observabilityStatus(): Promise<{
+    sessionId: string;
+    directory: string;
+    queued: number;
+    dropped: number;
+    writeFailures: number;
+    activeAlerts: string[];
+  }>;
+  openLogs(): Promise<void>;
+  exportLogBundle(): Promise<boolean>;
 }

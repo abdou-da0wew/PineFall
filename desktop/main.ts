@@ -1,15 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from "electron";
 import type { IpcMainInvokeEvent, IpcMainEvent } from "electron";
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { writeFile } from "node:fs/promises";
+import { Observability, clean } from "./observability";
+import { monitorEventLoopDelay } from "node:perf_hooks";
+import type { Span, Fields } from "./observability";
 import { pathToFileURL } from "node:url";
 import type { GraphicsMode } from "./contracts";
 import {
@@ -25,13 +21,16 @@ const data = app.getPath("userData");
 mkdirSync(data, { recursive: true });
 const settingsPath = path.join(data, "graphics.json");
 const bootMarker = path.join(data, "hardware-boot-pending");
-const logPath = path.join(data, "desktop.log");
+const observations = new Observability(data);
+const startup = observations.begin("app.startup");
+let startupEnded = false;
 function log(message: string) {
-  try {
-    if (existsSync(logPath) && statSync(logPath).size > 65536) writeFileSync(logPath, "");
-    appendFileSync(logPath, `${new Date().toISOString()} ${message}\n`);
-  } catch {}
+  observations.record("events", "app.message", { message }, startup);
 }
+process.on("uncaughtExceptionMonitor", (error) => {
+  observations.record("errors", "main.uncaught_exception", { error: error.stack || error.message });
+  void observations.flush();
+});
 function savedMode(): GraphicsMode {
   try {
     const value: unknown = JSON.parse(readFileSync(settingsPath, "utf8"));
@@ -45,8 +44,9 @@ function savedMode(): GraphicsMode {
   } catch {}
   return "compatibility";
 }
-function saveMode(mode: GraphicsMode) {
+function saveMode(mode: GraphicsMode, span?: Span) {
   writeFileSync(settingsPath, JSON.stringify({ mode }, null, 2));
+  observations.record("audit", "graphics.preference_saved", { mode }, span);
 }
 const recovering = existsSync(bootMarker);
 const mode = chooseGraphicsMode(savedMode(), process.argv, recovering);
@@ -84,6 +84,8 @@ async function changeGraphics(next: GraphicsMode) {
   if (next === mode) return;
   if (isLegacyOpenGL(next) && process.platform !== "linux")
     throw new Error("Linux-only graphics profile");
+  const operation = observations.begin("graphics.change");
+  observations.record("audit", "graphics.change_requested", { from: mode, to: next }, operation);
   const response = await dialog.showMessageBox({
     type: "warning",
     title: "Restart Pinefall?",
@@ -102,10 +104,23 @@ async function changeGraphics(next: GraphicsMode) {
     defaultId: 0,
     cancelId: 0,
   });
-  if (response.response !== 1) return;
-  saveMode(next);
+  if (response.response !== 1) {
+    observations.record("audit", "graphics.change_canceled", { requested: next }, operation);
+    observations.end(operation, "canceled");
+    return;
+  }
+  observations.record("audit", "graphics.change_confirmed", { from: mode, to: next }, operation);
+  try {
+    saveMode(next, operation);
+  } catch (error) {
+    observations.record("errors", "graphics.persist_failed", { error: String(error) }, operation);
+    observations.end(operation, "error");
+    throw error;
+  }
+  observations.end(operation);
   rmSync(bootMarker, { force: true });
   app.relaunch({ args: restartArgs(process.argv.slice(1)) });
+  await observations.close();
   app.exit(0);
 }
 async function exportDiagnostics() {
@@ -141,12 +156,14 @@ async function exportDiagnostics() {
     features: app.getGPUFeatureStatus(),
     gpu,
     metrics: app.getAppMetrics().map((p) => ({ type: p.type, cpu: p.cpu, memory: p.memory })),
-    log: existsSync(logPath) ? readFileSync(logPath, "utf8") : "",
+    observability: observations.status(),
   };
   writeFileSync(result.filePath, JSON.stringify(payload, null, 2));
   return true;
 }
 async function recover(reason: string) {
+  observations.record("errors", "process.recovery", { reason });
+  observations.alert("process_failure", true, { reason });
   log(reason);
   if (recoveryDialog || !win) return;
   recoveryDialog = true;
@@ -166,6 +183,7 @@ async function recover(reason: string) {
       app.relaunch({
         args: [...restartArgs(process.argv.slice(1)), "--safe-mode"],
       });
+      await observations.close();
       app.exit(0);
     }
   } finally {
@@ -243,6 +261,11 @@ else {
         if (trusted(event)) {
           rmSync(bootMarker, { force: true });
           log("Renderer ready");
+          if (!startupEnded) {
+            startupEnded = true;
+            observations.end(startup);
+          }
+          observations.record("events", "renderer.ready", { mode }, startup);
         }
       });
       ipcMain.handle("pinefall:graphics", async (event, next: unknown) => {
@@ -252,8 +275,245 @@ else {
       });
       ipcMain.handle("pinefall:diagnostics", async (event) => {
         if (!trusted(event)) throw new Error("Untrusted IPC sender");
-        return exportDiagnostics();
+        return observations.operation("diagnostics.export", async (span) => {
+          const saved = await exportDiagnostics();
+          observations.record("audit", "diagnostics.export", { saved }, span);
+          return saved;
+        });
       });
+      let rateStart = Date.now(),
+        rateCount = 0,
+        rejected = 0;
+      let lastFrame = 0,
+        errorTimes: number[] = [],
+        memoryHighSamples = 0;
+      ipcMain.on("pinefall:telemetry", (event, kind: unknown, input: unknown) => {
+        if (!trusted(event)) return;
+        if (Date.now() - rateStart > 1000) {
+          rateStart = Date.now();
+          rateCount = 0;
+        }
+        if (++rateCount > 40) {
+          rejected++;
+          return;
+        }
+        if (
+          !["error", "frames", "renderer", "action"].includes(String(kind)) ||
+          typeof input !== "object" ||
+          input === null
+        )
+          return;
+        const fields: Fields = {};
+        for (const key of [
+          "source",
+          "action",
+          "message",
+          "details",
+          "renderer",
+          "frames",
+          "slowFrames",
+          "elapsedMs",
+          "fps",
+          "meanFrameMs",
+          "maxFrameMs",
+        ]) {
+          if (key in input) {
+            const value = Reflect.get(input, key);
+            if (typeof value === "string") fields[key] = value.slice(0, 4096);
+            else if (
+              typeof value === "number" &&
+              Number.isFinite(value) &&
+              value >= 0 &&
+              value <= 1e9
+            )
+              fields[key] = value;
+          }
+        }
+        if (kind === "frames") {
+          if (
+            typeof fields.frames !== "number" ||
+            typeof fields.slowFrames !== "number" ||
+            typeof fields.elapsedMs !== "number" ||
+            fields.elapsedMs < 1000 ||
+            fields.slowFrames > fields.frames
+          )
+            return;
+          lastFrame = Date.now();
+          observations.record("metrics", "renderer.frames", fields);
+          observations.frames(fields.frames, fields.slowFrames, fields.elapsedMs);
+        } else if (kind === "error") {
+          errorTimes.push(Date.now());
+          errorTimes = errorTimes.slice(-1000);
+          observations.record("errors", "renderer.error", fields, startup);
+        } else if (kind === "action") observations.record("audit", "ui.action", fields);
+        else observations.record("events", "renderer.selected", fields, startup);
+      });
+      const eventLoop = monitorEventLoopDelay({ resolution: 20 });
+      eventLoop.enable();
+      let sampling = false;
+      const sampler = setInterval(async () => {
+        if (sampling) return;
+        sampling = true;
+        try {
+          const processes = app.getAppMetrics();
+          const groups = new Map<string, { memory: number; cpu: number; count: number }>();
+          for (const process of processes) {
+            const type = ["Browser", "Tab", "GPU", "Utility", "Zygote", "Sandbox helper"].includes(
+              process.type,
+            )
+              ? process.type
+              : "Other";
+            const group = groups.get(type) || { memory: 0, cpu: 0, count: 0 };
+            group.memory += process.memory.workingSetSize;
+            group.cpu += process.cpu.percentCPUUsage;
+            group.count++;
+            groups.set(type, group);
+          }
+          for (const [type, group] of groups)
+            observations.record("metrics", "process.by_type", {
+              processType: type,
+              workingSetSumMiB: group.memory / 1024,
+              cpuPercentSum: group.cpu,
+              processCount: group.count,
+            });
+          observations.record("metrics", "main.event_loop", {
+            p95DelayMs: eventLoop.percentile(95) / 1e6,
+            maxDelayMs: eventLoop.max / 1e6,
+          });
+          eventLoop.reset();
+          let memoryKiB = 0,
+            cpu = 0;
+          for (const process of processes) {
+            memoryKiB += process.memory.workingSetSize;
+            cpu += process.cpu.percentCPUUsage;
+          }
+          errorTimes = errorTimes.filter((time) => Date.now() - time <= 60000);
+          const memoryMiB = memoryKiB / 1024;
+          memoryHighSamples = memoryMiB > 1024 ? memoryHighSamples + 1 : 0;
+          const status = observations.status();
+          observations.record("metrics", "process.sample", {
+            workingSetSumMiB: memoryMiB,
+            cpuPercentSum: cpu,
+            processCount: processes.length,
+            errorsLastMinute: errorTimes.length,
+            ipcRejectedTotal: rejected,
+            logDroppedTotal: status.dropped,
+            logWriteFailures: status.writeFailures,
+          });
+          observations.alert("high_memory", memoryHighSamples >= 6, {
+            workingSetSumMiB: memoryMiB,
+            thresholdMiB: 1024,
+          });
+          observations.alert("error_burst", errorTimes.length >= 10, {
+            errorsLastMinute: errorTimes.length,
+          });
+          observations.alert(
+            "renderer_heartbeat_missing",
+            !!win &&
+              win.isVisible() &&
+              !win.isMinimized() &&
+              lastFrame > 0 &&
+              Date.now() - lastFrame > 20000,
+          );
+          await observations.prometheus({
+            pinefall_working_set_sum_bytes: memoryKiB * 1024,
+            pinefall_cpu_percent_sum: cpu,
+            pinefall_errors_last_minute: errorTimes.length,
+            pinefall_log_dropped_total: status.dropped,
+            pinefall_log_write_failures_total: status.writeFailures,
+          });
+        } catch (error) {
+          observations.record("errors", "metrics.sample_failed", { error: String(error) });
+        } finally {
+          sampling = false;
+        }
+      }, 5000);
+      sampler.unref();
+      let quitting = false;
+      app.on("before-quit", (event) => {
+        if (quitting) return;
+        quitting = true;
+        event.preventDefault();
+        clearInterval(sampler);
+        eventLoop.disable();
+        observations.record("events", "app.shutdown");
+        const timeout = setTimeout(() => app.exit(0), 2000);
+        void observations.close().finally(() => {
+          clearTimeout(timeout);
+          app.quit();
+        });
+      });
+      ipcMain.handle("pinefall:observability-status", (event) => {
+        if (!trusted(event)) throw new Error("Untrusted IPC sender");
+        return observations.status();
+      });
+      ipcMain.handle("pinefall:open-logs", async (event) => {
+        if (!trusted(event)) throw new Error("Untrusted IPC sender");
+        observations.record("audit", "logs.folder_opened");
+        await observations.flush();
+        const error = await shell.openPath(observations.directory);
+        if (error) throw new Error(error);
+      });
+      ipcMain.handle("pinefall:log-bundle", async (event) => {
+        if (!trusted(event)) throw new Error("Untrusted IPC sender");
+        return observations.operation("logs.export_bundle", async (span) => {
+          const result = await dialog.showSaveDialog({
+            title: "Export local diagnostic bundle",
+            defaultPath: "pinefall-observability.json",
+            filters: [{ name: "JSON", extensions: ["json"] }],
+          });
+          if (result.canceled || !result.filePath) {
+            observations.record("audit", "logs.export_canceled", {}, span);
+            return false;
+          }
+          observations.record("audit", "logs.export_confirmed", {}, span);
+          const gpu =
+            mode === "compatibility"
+              ? "Not queried in CPU mode"
+              : await observations
+                  .operation("gpu.inspect", () => app.getGPUInfo("complete"), span)
+                  .catch((error) => ({ error: clean(String(error)) }));
+          const snapshot = await observations.snapshot();
+          await writeFile(
+            result.filePath,
+            JSON.stringify(
+              {
+                ...snapshot,
+                system: {
+                  app: app.getVersion(),
+                  electron: process.versions.electron,
+                  chromium: process.versions.chrome,
+                  platform: process.platform,
+                  arch: process.arch,
+                  mode,
+                  switches: Object.fromEntries(switches),
+                  features: app.getGPUFeatureStatus(),
+                  gpu,
+                },
+                notes:
+                  "Local bounded logs; best-effort redaction. Review before sharing. CPU/process memory is summed working set, not unique physical memory. Frame samples measure render callbacks, not GPU completion.",
+              },
+              null,
+              2,
+            ),
+            { mode: 0o600 },
+          );
+          return true;
+        });
+      });
+      observations.record(
+        "events",
+        "session.started",
+        {
+          app: app.getVersion(),
+          electron: process.versions.electron,
+          platform: process.platform,
+          mode,
+          recovering,
+          requestedSwitches: JSON.stringify(switches),
+        },
+        startup,
+      );
       Menu.setApplicationMenu(
         Menu.buildFromTemplate([
           {
@@ -307,10 +567,18 @@ else {
           { label: "View", submenu: [{ role: "togglefullscreen" }, { role: "toggleDevTools" }] },
         ]),
       );
-      await win.loadFile(entry);
+      await observations.operation(
+        "window.load",
+        async () => {
+          await win?.loadFile(entry);
+        },
+        startup,
+      );
       win.show();
     })
     .catch((error) => {
+      observations.record("errors", "startup.failed", { error: String(error) }, startup);
+      observations.end(startup, "error");
       log(String(error));
       dialog.showErrorBox("Pinefall startup failed", String(error));
       app.quit();

@@ -1,3 +1,4 @@
+import { recordFrame } from "../telemetry";
 import type { RenderLoopProps, RendererInfo } from "../types";
 import { snapshotGame } from "../types";
 type Props = RenderLoopProps & {
@@ -135,6 +136,7 @@ export default function VgpuWorld({
           advanceGame(dt);
           activeWorld.update(game, clock.time, w, h, dt);
           activeWorld.render(f, activeOutput);
+          recordFrame("webgpu");
           hud += dt;
           if (hud > 0.09) {
             hud = 0;

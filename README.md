@@ -228,3 +228,7 @@ Open the **Renderer** button in the game to enter Graphics Lab. The Electron app
 Expand **Selected profile: backend, display and flags** to see exactly what the selected profile requests. These remain bundled profiles, not arbitrary independent Chromium-flag switches. GPU sandbox bypass and physical-adapter selection are not exposed as toggles. **Export GPU diagnostics** is available directly in the same panel. Renderer and Pixel/Crisp quality choices below it apply live without a restart. Desktop surface-size and frame-rate budgets remain fixed and are displayed, not adjustable controls.
 
 The Electron UI regression test covers profile selection, blocklist warnings, canceled restart, live quality changes and a diagnostics export initiated through the in-game button.
+
+## Offline observability
+
+Open **Renderer → Graphics Lab → Local diagnostics** for log-folder access, active local alerts and a diagnostic-bundle export. Categorized rotating JSONL files capture events, errors, settings audits, periodic metrics, correlated operation spans and alert transitions. No cloud uploads, web server or observability services are required. A local Prometheus-format text snapshot is also written. See [the observability guide](docs/OBSERVABILITY.md) for schemas, limits, privacy, target definitions and interpretation.

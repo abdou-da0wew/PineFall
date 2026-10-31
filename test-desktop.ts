@@ -88,7 +88,9 @@ try {
     await page.getByRole("radio", { name: /^Linux GPU · bypass/ }).check();
     await expect(page.getByText(/Warning: bypassing the blocklist/)).toBeVisible();
     await page.getByText("Selected profile: backend, display and flags").click();
-    await expect(page.locator(".desktop-flags")).toContainText("--ignore-gpu-blocklist");
+    await expect(
+      page.getByRole("region", { name: "Desktop GPU settings" }).locator(".desktop-flags"),
+    ).toContainText("--ignore-gpu-blocklist");
     await page.getByRole("button", { name: /Render quality: Pixel/ }).click();
     await expect(page.getByRole("button", { name: /Render quality: Crisp/ })).toBeVisible();
     await page.getByRole("button", { name: /Render quality: Crisp/ }).click();
@@ -107,6 +109,41 @@ try {
       .getByRole("region", { name: "Desktop GPU settings" })
       .screenshot({ path: artifact("desktop-graphics-settings.png") });
 
+    await expect(page.getByRole("region", { name: "Local observability" })).toBeVisible();
+    await page.evaluate(() => {
+      for (let i = 0; i < 12; i++)
+        window.pinefallDiagnostics?.report("observability-test", "token=top-secret test " + i);
+      window.pinefallDiagnostics?.clear();
+    });
+    await expect
+      .poll(
+        async () =>
+          await page.evaluate(async () => {
+            const status = await window.pinefallDesktop?.observabilityStatus();
+            return status?.activeAlerts.includes("error_burst");
+          }),
+        { timeout: 10000 },
+      )
+      .toBe(true);
+    const bundlePath = artifact("desktop-observability-bundle.json");
+    await application.evaluate(({ dialog }, filePath) => {
+      dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+    }, bundlePath);
+    await page.getByRole("button", { name: "EXPORT DIAGNOSTIC BUNDLE" }).click();
+    await expect(page.getByText("Diagnostic bundle saved. Review before sharing.")).toBeVisible();
+    const bundle = await Bun.file(bundlePath).json();
+    expect(bundle.files["errors.jsonl"]).toContain("observability-test");
+    expect(bundle.files["errors.jsonl"]).not.toContain("top-secret");
+    expect(bundle.files["audit.jsonl"]).toContain("graphics.change_canceled");
+    expect(bundle.files["audit.jsonl"]).toContain("quality.changed");
+    expect(bundle.files["metrics.jsonl"]).toContain("renderer.frames");
+    expect(bundle.files["traces.jsonl"]).toContain("app.startup");
+    expect(bundle.files["alerts.jsonl"]).toContain("error_burst");
+    expect(bundle.files["metrics.prom"]).toContain("pinefall_working_set_sum_bytes");
+    expect(bundle.status.writeFailures).toBe(0);
+    console.log(
+      "In-game diagnostic bundle, six categories, metrics text, audit, traces, redaction and local error alert PASS",
+    );
     await page.getByRole("button", { name: /^R3F WebGL/ }).click();
     await expect(page.getByText(/Desktop Compatibility Mode disables GPU/)).toBeVisible();
     await page.getByRole("button", { name: /^vgpu · WebGPU/ }).click();

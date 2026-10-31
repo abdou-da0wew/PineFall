@@ -81,6 +81,7 @@ interface DiagnosticEntry {
   }
   function report(source: string, message: unknown, details: string | null = "") {
     const text = format(message).slice(0, 24000);
+    window.pinefallDesktop?.telemetry("error", { source, message: text, details: details || "" });
     const last = entries[entries.length - 1];
     if (last && last.source === source && last.message === text) {
       last.count++;

@@ -17,6 +17,10 @@ const bridge: DesktopBridge = {
     if (!isGraphicsMode(mode)) throw new Error("Invalid graphics mode");
     await ipcRenderer.invoke("pinefall:graphics", mode);
   },
+  telemetry: (event, fields) => ipcRenderer.send("pinefall:telemetry", event, fields),
+  observabilityStatus: () => ipcRenderer.invoke("pinefall:observability-status"),
+  openLogs: () => ipcRenderer.invoke("pinefall:open-logs"),
+  exportLogBundle: () => ipcRenderer.invoke("pinefall:log-bundle"),
   exportDiagnostics: () => ipcRenderer.invoke("pinefall:diagnostics"),
 };
 contextBridge.exposeInMainWorld("pinefallDesktop", Object.freeze(bridge));

@@ -1,3 +1,4 @@
+import { recordFrame } from "./telemetry";
 import type { RenderLoopProps, Tree, BuildingData, Rock, Vec2, Stop, Job } from "./types";
 import { snapshotGame } from "./types";
 type Props = RenderLoopProps & {
@@ -401,6 +402,7 @@ export default function CompatibilityWorld({
         hud = 0;
         onUpdate(snapshotGame(game));
       }
+      recordFrame("canvas");
       frame = requestAnimationFrame(draw);
     }
     frame = requestAnimationFrame(draw);
