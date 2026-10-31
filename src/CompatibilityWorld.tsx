@@ -41,6 +41,38 @@ export default function CompatibilityWorld({
       return;
     }
     const ctx = context;
+    const desktop = window.pinefallDesktop?.runtime;
+    const frameInterval = desktop ? 1000 / desktop.targetFps : 0;
+    let nextRender = performance.now();
+    let reportedReady = false;
+    const staticObjects: RenderObject[] = [
+      ...trees.map((t) => ({ type: "tree" as const, ...t })),
+      ...buildings.map((b) => ({ type: "building" as const, ...b })),
+      ...lamps.map(([x, z]) => ({ type: "lamp" as const, x, z })),
+    ].sort((a, b) => a.x + a.z - b.x - b.z);
+    const movingCar: RenderObject = { type: "car", x: game.x, z: game.z };
+    const movingMarker: RenderObject = { type: "marker", x: 0, z: 35 };
+    const objects: RenderObject[] = new Array(staticObjects.length + 2);
+    function orderObjects() {
+      const first =
+        movingCar.x + movingCar.z <= movingMarker.x + movingMarker.z ? movingCar : movingMarker;
+      const second = first === movingCar ? movingMarker : movingCar;
+      let written = 0,
+        inserted = 0;
+      for (const item of staticObjects) {
+        if (inserted === 0 && first.x + first.z <= item.x + item.z) {
+          objects[written++] = first;
+          inserted = 1;
+        }
+        if (inserted === 1 && second.x + second.z <= item.x + item.z) {
+          objects[written++] = second;
+          inserted = 2;
+        }
+        objects[written++] = item;
+      }
+      if (inserted === 0) objects[written++] = first;
+      if (inserted < 2) objects[written] = second;
+    }
     let frame = 0,
       last = performance.now(),
       hud = 0,
@@ -51,6 +83,12 @@ export default function CompatibilityWorld({
       ratio = 1;
     function resize() {
       ratio = quality === "pixel" ? 0.55 : Math.min(devicePixelRatio || 1, 1.5);
+      if (desktop)
+        ratio = Math.min(
+          ratio,
+          desktop.maxRenderWidth / Math.max(1, canvas.clientWidth),
+          desktop.maxRenderHeight / Math.max(1, canvas.clientHeight),
+        );
       w = canvas.clientWidth * ratio;
       h = canvas.clientHeight * ratio;
       canvas.width = Math.max(1, Math.round(w));
@@ -61,7 +99,23 @@ export default function CompatibilityWorld({
     observer.observe(canvas);
     resize();
     function draw(now: number) {
-      const dt = Math.min((now - last) / 1000, 0.04);
+      if (document.hidden) {
+        last = now;
+        nextRender = now;
+        frame = requestAnimationFrame(draw);
+        return;
+      }
+      if (frameInterval && now + 0.5 < nextRender) {
+        frame = requestAnimationFrame(draw);
+        return;
+      }
+      if (frameInterval)
+        nextRender = now + frameInterval - Math.max(0, (now - nextRender) % frameInterval);
+      if (!reportedReady) {
+        window.pinefallDesktop?.ready();
+        reportedReady = true;
+      }
+      const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
       advanceGame(dt);
       const follow = 1 - Math.exp(-3 * dt);
@@ -172,13 +226,11 @@ export default function CompatibilityWorld({
           "#87927c",
         );
       }
-      const objects: RenderObject[] = [
-        ...trees.map((t) => ({ type: "tree" as const, ...t })),
-        ...buildings.map((b) => ({ type: "building" as const, ...b })),
-        ...lamps.map(([x, z]) => ({ type: "lamp" as const, x, z })),
-        { type: "car" as const, x: game.x, z: game.z },
-        { type: "marker" as const, x: stop.x, z: stop.z },
-      ].sort((a, b) => a.x + a.z - (b.x + b.z));
+      movingCar.x = game.x;
+      movingCar.z = game.z;
+      movingMarker.x = stop.x;
+      movingMarker.z = stop.z;
+      orderObjects();
       for (const o of objects) {
         let [px, py] = p(o.x, o.z);
         if (px < -150 * ratio || px > w + 150 * ratio || py < -100 * ratio || py > h + 200 * ratio)

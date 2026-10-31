@@ -2,6 +2,49 @@
 
 An atmospheric, top-down 3D driving game made with React Three Fiber, React, and Three.js. All models are procedural; no external model assets are required.
 
+## Desktop · Linux and Windows
+
+**For the AMD Radeon HD 6350 / TeraScale 2, leave Compatibility Mode enabled.** It is the default, not a GPU emulation mode: Electron hardware acceleration and GPU compositing are disabled before startup, the game uses Canvas 2D, and GPU selection/probing in the game is blocked. The OS desktop compositor may still use the display driver. This cannot protect against every OS/driver bug or promise zero stutter.
+
+### Install and play
+
+- **Linux x86-64:** download `Pinefall-1.0.0-linux-x86_64.AppImage`, run `chmod +x Pinefall-1.0.0-linux-x86_64.AppImage`, then launch it. A modern 64-bit Linux desktop with Electron's GTK/NSS/system-library dependencies is required. If FUSE is unavailable, use `./Pinefall-1.0.0-linux-x86_64.AppImage --appimage-extract-and-run`. Keep Chromium's OS sandbox enabled; do not run as root or use `--no-sandbox` as a normal workaround. Distributions that restrict user namespaces may need administrator-approved sandbox configuration or a locally packaged installation.
+- **Windows x64:** extract the entire `Pinefall-1.0.0-win-x64.zip`, then run `Pinefall.exe` from that folder. Do not copy the EXE alone. Target a current supported Windows 10/11 environment, not Windows 7/8. These development packages are **unsigned**, so Windows may show a publisher warning. Only run a build whose origin you trust.
+- The game and fonts are bundled locally; no web server or network connection is needed to play. Progress is session-only.
+
+### Graphics and recovery
+
+- Desktop rendering targets **30 FPS** and caps the internal render surface at **960 × 540**, including on high-DPI/4K monitors. The UI stays at native window resolution. This is a budget/target, not a minimum-performance guarantee.
+- Compatibility Mode skips costly backdrop blur/grain. Static Canvas depth order is cached rather than sorted every frame; physics uses bounded substeps; camera vectors are reused; audio/timers/observers/render loops clean up on teardown.
+- **Graphics → Hardware · experimental** requires explicit confirmation and a restart (ending the current shift). Chromium's GPU blocklist remains enabled. R3F shadows are disabled for desktop hardware mode, with capped resolution and a 30 FPS invalidation target. Actual hardware rendering depends on the adapter/driver: software or CPU fallback can still occur. **The HD 6350 is not assumed to support current WebGL 2 or WebGPU.** vgpu is still the actual Vercel WebGPU library, not a legacy-driver compatibility layer.
+- A failed hardware startup is remembered and the next launch recovers to Compatibility Mode. GPU-process/renderer crashes offer a safe restart; detected hardware-mode crashes save safe mode for the next launch. Native driver/OS hangs can still prevent an orderly recovery.
+- Emergency launch: `./Pinefall-1.0.0-linux-x86_64.AppImage --safe-mode` or `Pinefall.exe --safe-mode`. This overrides the saved graphics preference for that launch.
+- **Graphics → Export diagnostics…** saves Electron/Chromium versions, graphics feature status, process memory/CPU snapshots and a bounded desktop log. Adapter information is queried only in hardware mode. Review the JSON before sharing it; driver strings and error messages can contain system details. No file is uploaded.
+
+### Build with Bun
+
+```sh
+bun install --frozen-lockfile
+bun run desktop:install       # download the Electron runtime for local execution
+bun run desktop               # build and launch (no Vite server required)
+bun run desktop:linux         # x64 AppImage
+bun run desktop:windows       # x64 portable ZIP; cross-build does not need Wine
+bun run desktop:unpacked      # Linux unpacked app for local inspection
+```
+
+Output: `build/releases/`. The TypeScript Electron entry points are compiled to generated CJS in `build/desktop-app`; generated JS is not authored source. Packaging explicitly excludes `node_modules` (including native vgpu/Dawn binaries): browser runtime dependencies are already bundled by Vite. The app uses sandboxed/context-isolated preload IPC, no renderer Node access, sender validation, a local-resource CSP, denied permissions, and restricted external navigation. Production Electron fuses disable RunAsNode, NODE_OPTIONS, and Node CLI inspection.
+
+```sh
+bun run desktop:prepare
+bun run test:desktop          # on a desktop/display
+# Headless Linux CI only (requires Xvfb):
+xvfb-run -a bun run test:desktop
+# After packaging Linux (also checks CSP inside the packaged app):
+xvfb-run -a bun run test:desktop-package
+```
+
+The Electron test uses `--no-sandbox` **only in the test harness** for container compatibility. It covers CPU startup, gameplay, GPU-selection guards, 4K render-size bounds, native diagnostics export, failed-hardware-boot recovery, a short frame-cadence sample and repeated quality-toggle heap smoke test. It is **not** an HD 6350 driver test, a long-running memory certification, or a Windows runtime test. The existing browser CPU/WebGL/WebGPU and device-loss suites remain available below. A CI workflow builds both OS packages; Windows runtime validation on the target machine is still needed.
+
 ## Toolchain
 
 All authored application, tooling, tests, and configuration code is **TypeScript / TSX**. `tsconfig.json` enables strict checking and disallows JavaScript input. There are no authored `.js`, `.jsx`, `.mjs`, or `.cjs` files. HTML, CSS, and WGSL remain in their native formats; Vite necessarily emits JavaScript for browsers.
@@ -131,3 +174,9 @@ bun run check:shader       # Device-backed WGSL validation
 Browser suites start and stop their own temporary Vite server on port 4173. No running dev server is required. Set `TEST_PORT` to choose a different port, or `TEST_BASE_URL` to use a server you already run. Screenshots and reports go to git-ignored `artifacts/tests/`; use `TEST_ARTIFACT_DIR` to change that directory. Individual `.ts` scripts default to the dev server at port 5173 when invoked directly.
 
 The WebGPU suite explicitly enables Chromium software Vulkan for testing; these launch flags configure the test browser only, not a visitor's browser. Native tests need a usable Vulkan or software adapter (`bun --bun vgpu doctor --pretty`).
+
+## Desktop validation notes
+
+Validated in the Linux container: strict TypeScript, Oxlint (zero warnings/errors), formatting, production build, browser CPU/WebGL/WebGPU/device-loss suites, staged Electron gameplay/recovery tests, and both the unpacked Linux app and extracted AppImage. Windows ZIP packaging completed; Windows runtime and physical Radeon HD 6350 testing are outstanding. The short Electron CPU cadence measurement was approximately 30 FPS; 20 quality changes retained about 1 MB of additional JavaScript heap after GC. These are smoke-test observations, not a long-duration leak or driver-stability guarantee.
+
+Dependency audit currently reports **one moderate minimatch denial-of-service advisory (GHSA-g3hv-75wg-m249)** in the electron-builder development dependency tree. These packages are not shipped in the desktop ASAR; packaging uses repository-controlled glob patterns. A blanket major-version override would break legacy minimatch consumers, so it has not been forced. Keep the packaging toolchain updated, and do not run it over untrusted build configurations.

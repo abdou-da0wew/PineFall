@@ -50,6 +50,8 @@ export function requestContext(
   return null;
 }
 export function probeRenderer() {
+  if (window.pinefallDesktop?.runtime.mode === "compatibility")
+    return { available: false, info: CPU_INFO };
   const canvas = document.createElement("canvas");
   const gl = requestContext(canvas);
   if (!gl)
@@ -73,6 +75,8 @@ export const CPU_INFO: RendererInfo = {
   virtual: false,
 };
 export function initialRenderer(): { mode: RendererMode; info: RendererInfo } {
+  if (window.pinefallDesktop?.runtime.mode === "compatibility")
+    return { mode: "2d", info: CPU_INFO };
   const forced = new URLSearchParams(location.search).get("renderer");
   if (forced === "vgpu")
     return {

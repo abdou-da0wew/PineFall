@@ -1,0 +1,36 @@
+name: Desktop packages
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux
+          - os: windows-latest
+            target: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run desktop:install
+      - run: bun run desktop:prepare
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a bun run test:desktop
+      - run: bun scripts/package-desktop.ts ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pinefall-${{ matrix.target }}-x64
+          path: |
+            build/releases/*.AppImage
+            build/releases/*.zip
+          if-no-files-found: error

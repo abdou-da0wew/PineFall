@@ -1,3 +1,11 @@
 {
-  "ignorePatterns": ["node_modules", "dist", "artifacts", "bun.lock", "vgpu-*.json", "audit.json"]
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "artifacts",
+    "bun.lock",
+    "vgpu-*.json",
+    "audit.json",
+    "build"
+  ]
 }

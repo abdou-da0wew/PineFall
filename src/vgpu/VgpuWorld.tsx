@@ -63,8 +63,9 @@ export default function VgpuWorld({
       const rect = canvas.getBoundingClientRect();
       w = Math.max(1, rect.width);
       h = Math.max(1, rect.height);
-      const ratio =
-        latest.current.quality === "pixel" ? 0.55 : Math.min(devicePixelRatio || 1, 1.5);
+      let ratio = latest.current.quality === "pixel" ? 0.55 : Math.min(devicePixelRatio || 1, 1.5);
+      const desktop = window.pinefallDesktop?.runtime;
+      if (desktop) ratio = Math.min(ratio, desktop.maxRenderWidth / w, desktop.maxRenderHeight / h);
       output.resize([Math.max(1, Math.round(w * ratio)), Math.max(1, Math.round(h * ratio))]);
       currentQuality = latest.current.quality;
     }
@@ -99,6 +100,7 @@ export default function VgpuWorld({
       await gpu.settled();
       if (disposed || failed) return;
       clearTimeout(timeout);
+      window.pinefallDesktop?.ready();
       const info = gpu.gpu.adapterInfo;
       const name = info
         ? [info.vendor, info.architecture, info.device, info.description]
@@ -112,11 +114,24 @@ export default function VgpuWorld({
         exposed: !!info,
       });
       const clock = api.clock(gpu);
+      let accumulated = 0;
+      const desktop = window.pinefallDesktop?.runtime;
       loop = api.frameLoop(gpu, (f) => {
         if (disposed || failed) return;
         try {
           if (currentQuality !== latest.current.quality) resize();
-          const dt = Math.min(clock.deltaTime, 0.04);
+          accumulated += clock.deltaTime;
+          if (document.hidden) {
+            accumulated = 0;
+            f.cancel();
+            return;
+          }
+          if (desktop && accumulated < 1 / desktop.targetFps) {
+            f.cancel();
+            return;
+          }
+          const dt = Math.min(accumulated, 0.1);
+          accumulated = 0;
           advanceGame(dt);
           activeWorld.update(game, clock.time, w, h, dt);
           activeWorld.render(f, activeOutput);

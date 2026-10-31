@@ -2,6 +2,12 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "re
 import { createRoot } from "react-dom/client";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
+import "@fontsource/dm-sans/400.css";
+import "@fontsource/dm-sans/500.css";
+import "@fontsource/dm-sans/600.css";
+import "@fontsource/dm-sans/700.css";
+import "@fontsource/space-grotesk/500.css";
+import "@fontsource/space-grotesk/700.css";
 import "./style.css";
 import type { ThreeElements } from "@react-three/fiber";
 import type {
@@ -307,6 +313,15 @@ function Headlights() {
 }
 let lastCollisionTime = -1;
 function advanceGame(dt: number) {
+  // Bounded substeps avoid tunneling and keep speed consistent at 30 FPS.
+  let remaining = Math.min(Math.max(dt, 0), 0.1);
+  while (remaining > 0) {
+    const step = Math.min(remaining, 1 / 120);
+    stepGame(step);
+    remaining -= step;
+  }
+}
+function stepGame(dt: number) {
   const g = game;
   if (g.playing && !g.paused) {
     g.time += dt;
@@ -360,6 +375,29 @@ function advanceGame(dt: number) {
     g.hit = Math.max(0, g.hit - dt * 1.6);
   }
 }
+function DesktopFrameBudget() {
+  const { invalidate, size, setDpr } = useThree();
+  const desktop = window.pinefallDesktop?.runtime;
+  useEffect(() => {
+    if (desktop)
+      setDpr(
+        Math.min(
+          0.75,
+          desktop.maxRenderWidth / Math.max(size.width, 1),
+          desktop.maxRenderHeight / Math.max(size.height, 1),
+        ),
+      );
+  }, [desktop, setDpr, size.width, size.height]);
+  useEffect(() => {
+    if (!desktop) return;
+    const timer = setInterval(() => {
+      if (!document.hidden) invalidate();
+    }, 1000 / desktop.targetFps);
+    return () => clearInterval(timer);
+  }, [desktop, invalidate]);
+  return null;
+}
+
 function Physics({ onUpdate }: { onUpdate: UpdateGame }) {
   const car = useRef<THREE.Group>(null!),
     dust = useRef<THREE.InstancedMesh>(null!);
@@ -368,8 +406,9 @@ function Physics({ onUpdate }: { onUpdate: UpdateGame }) {
   const dustParts = useMemo(() => Array.from({ length: 24 }, () => ({ x: 0, z: 0, age: 99 })), []);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const tick = useRef(0);
+  const followPosition = useMemo(() => new THREE.Vector3(), []);
   useFrame((_state, delta) => {
-    let dt = Math.min(delta, 0.04);
+    let dt = Math.min(delta, 0.1);
     let g = game;
     advanceGame(dt);
     if (g.playing && !g.paused) {
@@ -402,7 +441,7 @@ function Physics({ onUpdate }: { onUpdate: UpdateGame }) {
     let tx = g.x - Math.sin(g.angle) * ahead,
       tz = g.z - Math.cos(g.angle) * ahead;
     const factor = 1 - Math.exp(-3 * dt);
-    camera.position.lerp(new THREE.Vector3(tx + 23, 37, tz + 28), factor);
+    camera.position.lerp(followPosition.set(tx + 23, 37, tz + 28), factor);
     camera.lookAt(camera.position.x - 23, 0, camera.position.z - 28);
     camera.updateProjectionMatrix();
     timer.current += dt;
@@ -610,7 +649,15 @@ function App() {
       "CPU-compatible mode is active. No WebGL or physical GPU is required. Your mission is unchanged.",
     );
   }
+  function safeDesktop(): boolean {
+    if (window.pinefallDesktop?.runtime.mode !== "compatibility") return false;
+    setRendererNote(
+      "Desktop Compatibility Mode disables GPU acceleration. Use Graphics → Hardware in the desktop menu to opt in and restart. This is not recommended for Radeon HD 6350-class drivers.",
+    );
+    return true;
+  }
   function tryVgpu() {
+    if (safeDesktop()) return;
     setBackend({
       kind: "vgpu · initializing WebGPU",
       name: "Requesting adapter and pre-warming pipelines…",
@@ -639,6 +686,7 @@ function App() {
     );
   }
   function tryAuto() {
+    if (safeDesktop()) return;
     const result = probeRenderer();
     if (result.available) {
       setBackend(result.info);
@@ -652,6 +700,7 @@ function App() {
     }
   }
   function tryWebGL() {
+    if (safeDesktop()) return;
     if (renderer === "3d") {
       setRendererNote(
         "WebGL is already active. The adapter below is the one your browser supplies; this page cannot choose a different physical or virtual GPU.",
@@ -787,6 +836,18 @@ function App() {
     }, 100);
     return () => clearInterval(id);
   }, [sound]);
+  useEffect(
+    () => () => {
+      clearTimeout(noteTimer.current);
+      const sound = audio.current;
+      if (sound) {
+        sound.osc.stop();
+        void sound.ctx.close();
+        audio.current = null;
+      }
+    },
+    [],
+  );
   const target = s.done ? 0 : s.loaded ? JOBS[s.job].to : 0,
     distance = Math.round(Math.hypot(s.x - STOPS[target].x, s.z - STOPS[target].z)),
     near = distance < 7;
@@ -829,20 +890,24 @@ function App() {
         ) : (
           <WorldErrorBoundary key={rendererKey} onFallback={rendererFailed}>
             <Canvas
-              shadows={!backend.software}
+              shadows={!backend.software && !window.pinefallDesktop}
+              frameloop={window.pinefallDesktop ? "demand" : "always"}
               orthographic
               dpr={
-                quality === "pixel"
-                  ? backend.software
-                    ? 0.45
-                    : 0.55
-                  : backend.software
-                    ? 0.8
-                    : 1.5
+                window.pinefallDesktop
+                  ? Math.min(0.75, 960 / window.innerWidth, 540 / window.innerHeight)
+                  : quality === "pixel"
+                    ? backend.software
+                      ? 0.45
+                      : 0.55
+                    : backend.software
+                      ? 0.8
+                      : 1.5
               }
               camera={{ position: [23, 37, 62], zoom: 16, near: 0.1, far: 170 }}
               gl={createCompatibleRenderer}
               onCreated={({ gl }) => {
+                window.pinefallDesktop?.ready();
                 setBackend(inspectContext(gl.getContext()));
                 gl.toneMapping = THREE.ACESFilmicToneMapping;
                 gl.toneMappingExposure = 1.1;
@@ -860,6 +925,7 @@ function App() {
                 );
               }}
             >
+              <DesktopFrameBudget />
               <Scene state={s} onUpdate={setS} />
             </Canvas>
           </WorldErrorBoundary>
@@ -1210,6 +1276,15 @@ function App() {
           >
             <div className="eyebrow">PINEFALL / GRAPHICS LAB</div>
             <h2>A road for every machine.</h2>
+            {window.pinefallDesktop && (
+              <div className="tip">
+                <strong>Desktop: {window.pinefallDesktop.runtime.mode}</strong>
+                <br />
+                Compatibility Mode: CPU Canvas, 30 FPS target, at most 960 × 540 internal pixels.
+                Hardware mode is opt-in from the Graphics menu and requires a restart. Export
+                diagnostics from that menu if your driver glitches.
+              </div>
+            )}
             <p>
               Keep playing without a dedicated GPU. Auto tries R3F WebGL, then Vercel Labs vgpu
               (WebGPU), then CPU-compatible Canvas 2D.
