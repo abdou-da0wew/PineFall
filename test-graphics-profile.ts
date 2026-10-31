@@ -1,5 +1,11 @@
 import { test, expect } from "bun:test";
-import { chooseGraphicsMode, graphicsSwitches, restartArgs } from "./desktop/graphics";
+import {
+  chooseGraphicsMode,
+  graphicsSwitches,
+  restartArgs,
+  nativeProfileArgs,
+  needsNativeProfile,
+} from "./desktop/graphics";
 test("Linux OpenGL explicitly selects ANGLE GL and X11, not Vulkan", () => {
   const switches = Object.fromEntries(graphicsSwitches("linux-opengl", "linux"));
   expect(switches["use-gl"]).toBe("angle");
@@ -34,4 +40,29 @@ test("Safe mode and failed startup override a forced hardware profile", () => {
 test("Linux profiles never silently apply to Windows", () => {
   expect(() => graphicsSwitches("linux-opengl", "win32")).toThrow();
   expect(graphicsSwitches("hardware", "win32")).toEqual([]);
+});
+
+test("Native bootstrap preserves unrelated features, replaces old graphics arguments and prevents late-only flags", () => {
+  const args = nativeProfileArgs(
+    [
+      "app",
+      "--graphics=hardware",
+      "--ozone-platform=wayland",
+      "--use-angle=vulkan",
+      "--disable-features=SomeFeature",
+      "--disable-gpu",
+    ],
+    "linux-opengl",
+    "linux",
+  );
+  expect(args).toContain("--ozone-platform=x11");
+  expect(args).toContain("--disable-features=SomeFeature,Vulkan");
+  expect(args).not.toContain("--disable-gpu");
+  expect(args).not.toContain("--use-angle=vulkan");
+  expect(needsNativeProfile("linux-opengl", "linux", args, "x11")).toBe(false);
+  expect(
+    needsNativeProfile("linux-opengl", "linux", ["app", "--graphics=linux-opengl"], "x11"),
+  ).toBe(true);
+  expect(needsNativeProfile("linux-opengl", "linux", args, undefined)).toBe(true);
+  expect(nativeProfileArgs(args, "hardware", "linux")).not.toContain("--ozone-platform=x11");
 });

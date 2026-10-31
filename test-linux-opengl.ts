@@ -2,6 +2,8 @@ import { _electron, expect } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { nativeProfileArgs } from "./desktop/graphics";
+import type { GraphicsMode } from "./desktop/contracts";
 import { projectRoot } from "./scripts/test-support";
 const profile = await mkdtemp(path.join(tmpdir(), "pinefall-gl-"));
 const env = Object.fromEntries(
@@ -10,11 +12,15 @@ const env = Object.fromEntries(
   ),
 );
 try {
-  for (const mode of ["linux-opengl", "linux-opengl-unblocked"]) {
+  for (const mode of ["linux-opengl", "linux-opengl-unblocked"] satisfies GraphicsMode[]) {
     const app = await _electron.launch({
       executablePath: path.join(projectRoot, "node_modules/electron/dist/electron"),
-      args: [path.join(projectRoot, "build/desktop-app"), `--graphics=${mode}`, "--no-sandbox"],
-      env: { ...env, XDG_CONFIG_HOME: profile },
+      args: nativeProfileArgs(
+        [path.join(projectRoot, "build/desktop-app"), "--no-sandbox"],
+        mode,
+        "linux",
+      ),
+      env: { ...env, XDG_CONFIG_HOME: profile, GDK_BACKEND: "x11" },
       timeout: 20000,
     });
     try {

@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from "elect
 import type { IpcMainInvokeEvent, IpcMainEvent } from "electron";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { Observability, clean } from "./observability";
 import { monitorEventLoopDelay } from "node:perf_hooks";
@@ -13,7 +14,8 @@ import {
   isLegacyOpenGL,
   graphicsSwitches,
   chooseGraphicsMode,
-  restartArgs,
+  nativeProfileArgs,
+  needsNativeProfile,
 } from "./graphics";
 
 app.setName("Pinefall");
@@ -48,8 +50,42 @@ function saveMode(mode: GraphicsMode, span?: Span) {
   writeFileSync(settingsPath, JSON.stringify({ mode }, null, 2));
   observations.record("audit", "graphics.preference_saved", { mode }, span);
 }
+const nativeArguments = process.argv.slice(1);
+const launchGdkBackend = process.env.GDK_BACKEND;
 const recovering = existsSync(bootMarker);
 const mode = chooseGraphicsMode(savedMode(), process.argv, recovering);
+const nativeRestartNeeded = needsNativeProfile(
+  mode,
+  process.platform,
+  nativeArguments,
+  launchGdkBackend,
+);
+async function relaunchWithProfile(next: GraphicsMode) {
+  if (process.platform === "linux" && isLegacyOpenGL(next)) process.env.GDK_BACKEND = "x11";
+  const image = process.platform === "linux" && app.isPackaged ? process.env.APPIMAGE : undefined;
+  const args = nativeProfileArgs(process.argv.slice(1), next, process.platform);
+  // Keep GTK and Ozone aligned when switching away from a profile that set GDK_BACKEND.
+  if (
+    process.platform === "linux" &&
+    process.env.GDK_BACKEND === "x11" &&
+    !args.some((arg) => arg.startsWith("--ozone-platform="))
+  )
+    args.push("--ozone-platform=x11");
+  if (image && path.isAbsolute(image) && existsSync(image)) {
+    // AppImage extraction/mount cleanup can remove Electron's relaunch helper. Start the
+    // original image directly, independently of that temporary directory and without FUSE.
+    app.releaseSingleInstanceLock();
+    const child = spawn(image, ["--appimage-extract-and-run", ...args], {
+      detached: true,
+      stdio: "inherit",
+    });
+    await new Promise<void>((resolve, reject) => {
+      child.once("spawn", resolve);
+      child.once("error", reject);
+    });
+    child.unref();
+  } else app.relaunch({ args });
+}
 if (mode === "compatibility") app.disableHardwareAcceleration();
 const switches = graphicsSwitches(mode, process.platform);
 for (const [name, value] of switches) {
@@ -119,7 +155,7 @@ async function changeGraphics(next: GraphicsMode) {
   }
   observations.end(operation);
   rmSync(bootMarker, { force: true });
-  app.relaunch({ args: restartArgs(process.argv.slice(1)) });
+  await relaunchWithProfile(next);
   await observations.close();
   app.exit(0);
 }
@@ -146,6 +182,14 @@ async function exportDiagnostics() {
     arch: process.arch,
     mode,
     requestedSwitches: Object.fromEntries(switches),
+    nativeStartup: {
+      arguments: nativeArguments.filter((arg) =>
+        /^--(?:graphics|pinefall-native-profile|ozone-platform|use-gl|use-angle|disable-features|disable-gpu|disable-gpu-compositing|ignore-gpu-blocklist|disable-accelerated-video-decode)(?:=|$)/.test(
+          arg,
+        ),
+      ),
+      gdkBackend: launchGdkBackend || null,
+    },
     session: {
       type: process.env.XDG_SESSION_TYPE,
       display: process.env.DISPLAY,
@@ -180,9 +224,7 @@ async function recover(reason: string) {
     });
     if (answer.response === 1) {
       saveMode("compatibility");
-      app.relaunch({
-        args: [...restartArgs(process.argv.slice(1)), "--safe-mode"],
-      });
+      await relaunchWithProfile("compatibility");
       await observations.close();
       app.exit(0);
     }
@@ -191,7 +233,39 @@ async function recover(reason: string) {
   }
 }
 if (!app.requestSingleInstanceLock()) app.quit();
-else {
+else if (nativeRestartNeeded) {
+  // Electron may select Ozone before application JavaScript executes. Relaunch before creating
+  // any window so that Chromium receives this profile at native process initialization.
+  if (process.argv.includes(`--pinefall-native-profile=${mode}`)) {
+    observations.record("errors", "native_profile.bootstrap_failed", {
+      mode,
+      message:
+        "Required startup switches or GDK_BACKEND did not survive relaunch; refusing a restart loop.",
+    });
+    void observations.close().finally(() => app.exit(1));
+  } else {
+    observations.record(
+      "events",
+      "native_profile.relaunch",
+      {
+        mode,
+        gdkBackend: launchGdkBackend || "unset",
+        reason: "Pass ANGLE/OpenGL/X11 settings before Chromium initialization",
+      },
+      startup,
+    );
+    observations.end(startup, "relaunch");
+    void (async () => {
+      await relaunchWithProfile(mode);
+      await observations.close();
+      app.exit(0);
+    })().catch(async (error) => {
+      observations.record("errors", "native_profile.relaunch_failed", { error: String(error) });
+      await observations.close();
+      app.exit(1);
+    });
+  }
+} else {
   app.on("second-instance", () => {
     if (win) {
       if (win.isMinimized()) win.restore();
@@ -506,6 +580,10 @@ else {
         "session.started",
         {
           app: app.getVersion(),
+          processId: process.pid,
+          gdkBackend: launchGdkBackend || "unset",
+          nativeOzoneArgument:
+            nativeArguments.find((arg) => arg.startsWith("--ozone-platform=")) || "not supplied",
           electron: process.versions.electron,
           platform: process.platform,
           mode,

@@ -232,3 +232,19 @@ The Electron UI regression test covers profile selection, blocklist warnings, ca
 ## Offline observability
 
 Open **Renderer → Graphics Lab → Local diagnostics** for log-folder access, active local alerts and a diagnostic-bundle export. Categorized rotating JSONL files capture events, errors, settings audits, periodic metrics, correlated operation spans and alert transitions. No cloud uploads, web server or observability services are required. A local Prometheus-format text snapshot is also written. See [the observability guide](docs/OBSERVABILITY.md) for schemas, limits, privacy, target definitions and interpretation.
+
+### Linux native-startup correction
+
+The original `9c79159` profile changed Ozone switches from application JavaScript. That did not reliably select X11 before Chromium initialization: user stderr showed Wayland objects even under the X11 profile. The corrected build passes the OpenGL/X11 profile on the **native process command line** and sets `GDK_BACKEND=x11` for the fresh process. If a saved/CLI OpenGL profile lacks those startup settings, the app performs one early relaunch before creating a window. A bootstrap sentinel prevents endless restart loops. AppImage relaunch uses the original AppImage path when available, not a temporary mounted executable. When switching away from that profile, X11 is retained if GTK remains configured for X11.
+
+The GPU diagnostic JSON now distinguishes native startup arguments/GDK environment from switches requested later in JavaScript. Session events also include the native Ozone argument and GDK backend. These fields show requested startup configuration, not proof of the actual hardware adapter.
+
+This fixes the startup ordering/configuration path; it does **not** establish that the CEDAR GPU-process crash is solved. Xvfb tests validate the fresh-process restart and matching arguments/environment, but no physical Radeon or Wayland compositor was available for validation. The sandbox and driver workarounds remain enabled. A crash before application JavaScript can still bypass application logging; use terminal stderr capture for that case.
+
+One-line diagnostic launch (fully close other instances first):
+
+```sh
+env -u WAYLAND_DISPLAY GDK_BACKEND=x11 ./Pinefall-1.0.0-linux-x86_64.AppImage --ozone-platform=x11 --use-gl=angle --use-angle=gl --disable-features=Vulkan --disable-accelerated-video-decode --graphics=linux-opengl --enable-logging=stderr 2>&1 | tee -a pinefall-native-x11.log
+```
+
+Keep `DISPLAY` set; this requires a working X server or XWayland. An existing failed-startup marker may still select CPU recovery on the first attempt. The absence of a successful GPU-startup report is not evidence of a working GPU.

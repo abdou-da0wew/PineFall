@@ -30,6 +30,8 @@ jobs:
         run: xvfb-run -a bun run test:desktop
       - if: runner.os == 'Linux'
         run: xvfb-run -a bun run test:linux-gpu
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a bun run test:native-bootstrap
       - run: bun scripts/package-desktop.ts ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
