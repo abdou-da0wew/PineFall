@@ -25,7 +25,9 @@ try {
     });
     try {
       const page = await app.firstWindow();
-      await expect(page.getByRole("button", { name: "START YOUR SHIFT" })).toBeVisible({
+      await expect(
+        page.getByRole("button", { name: /START YOUR SHIFT|CONTINUE SHIFT/ }),
+      ).toBeVisible({
         timeout: 20000,
       });
       expect(await page.evaluate(() => window.pinefallDesktop?.runtime.mode)).toBe(mode);
@@ -40,7 +42,7 @@ try {
       expect(switches.angle).toBe("gl");
       expect(switches.ozone).toBe("x11");
       expect(switches.blocklist).toBe(mode.endsWith("unblocked"));
-      await page.getByRole("button", { name: "START YOUR SHIFT" }).click();
+      await page.getByRole("button", { name: /START YOUR SHIFT|CONTINUE SHIFT/ }).click();
       await page.locator('button[title="Renderer settings"]').click();
       await page.getByRole("button", { name: /^vgpu · WebGPU/ }).click();
       await expect(page.getByText(/intentionally skips WebGPU/)).toBeVisible();

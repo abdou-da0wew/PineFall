@@ -1,3 +1,15 @@
+import { useGraphics, createSpatialIndex } from "./graphicsSettings";
+import RenderSettingsPanel from "./RenderSettingsPanel";
+import PostProcessing from "./PostProcessing";
+import {
+  OptimizedForest as TreeForest,
+  BatchedRocks,
+  RoadMarkings,
+  Scenery,
+  ChimneySmoke,
+  LANDMARKS,
+} from "./WorldScenery";
+import { loadGame, saveGame, courierRank, conditionBonus } from "./saveGame";
 import { recordFrame } from "./telemetry";
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createRoot } from "react-dom/client";
@@ -55,6 +67,10 @@ const game: GameState = {
   time: 0,
   boost: 100,
 };
+const checkpoint = loadGame();
+if (checkpoint) Object.assign(game, checkpoint);
+const focus = () => game;
+const collisionIndex = createSpatialIndex(trees, 8);
 type BoxProps = Omit<ThreeElements["mesh"], "position"> & { p?: Vec3; s?: Vec3; c?: string };
 function Box({ p = [0, 0, 0], s = [1, 1, 1], c = "#fff", ...props }: BoxProps) {
   return (
@@ -62,50 +78,6 @@ function Box({ p = [0, 0, 0], s = [1, 1, 1], c = "#fff", ...props }: BoxProps) {
       <boxGeometry args={s} />
       <meshStandardMaterial color={c} roughness={0.9} />
     </mesh>
-  );
-}
-function TreeForest() {
-  const trunk = useRef<THREE.InstancedMesh>(null!),
-    foliage = useRef<THREE.InstancedMesh>(null!);
-  useEffect(() => {
-    const dummy = new THREE.Object3D(),
-      color = new THREE.Color();
-    trees.forEach((t, i) => {
-      dummy.position.set(t.x, t.s * 1.6, t.z);
-      dummy.scale.set(0.38 * t.s, 3.2 * t.s, 0.38 * t.s);
-      dummy.rotation.set(0, 0, 0);
-      dummy.updateMatrix();
-      trunk.current.setMatrixAt(i, dummy.matrix);
-      for (let l = 0; l < 3; l++) {
-        dummy.position.set(t.x, (2.5 + l * 1.35) * t.s, t.z);
-        dummy.scale.set((2.15 - l * 0.45) * t.s, (3 - l * 0.25) * t.s, (2.15 - l * 0.45) * t.s);
-        dummy.rotation.y = i * 0.9;
-        dummy.updateMatrix();
-        foliage.current.setMatrixAt(i * 3 + l, dummy.matrix);
-        color.set(["#294c48", "#355b50", "#406656", "#2e534d"][i % 4]);
-        color.multiplyScalar(1 + l * 0.09);
-        foliage.current.setColorAt(i * 3 + l, color);
-      }
-    });
-    trunk.current.instanceMatrix.needsUpdate = true;
-    foliage.current.instanceMatrix.needsUpdate = true;
-  }, []);
-  return (
-    <>
-      <instancedMesh ref={trunk} args={[undefined, undefined, trees.length]} castShadow>
-        <boxGeometry />
-        <meshStandardMaterial color="#554e46" />
-      </instancedMesh>
-      <instancedMesh
-        ref={foliage}
-        args={[undefined, undefined, trees.length * 3]}
-        castShadow
-        receiveShadow
-      >
-        <coneGeometry args={[1, 1, 5]} />
-        <meshStandardMaterial roughness={1} flatShading />
-      </instancedMesh>
-    </>
   );
 }
 function Building({ b }: { b: BuildingData }) {
@@ -137,36 +109,24 @@ function Building({ b }: { b: BuildingData }) {
           </mesh>
         </>
       )}
-      <pointLight
-        position={[0, 2.5, b.d / 2 + 2]}
-        color="#ffc57d"
-        intensity={22}
-        distance={10}
-        decay={2}
-      />
     </group>
   );
 }
 function Roads() {
   return (
     <>
+      <RoadMarkings />
       <Box p={[0, -0.18, 0]} s={[124, 0.3, 124]} c="#4c6456" />
       {[-36, 0, 36].map((x) => (
         <group key={"x" + x}>
           <Box p={[x, 0, 0]} s={[8, 0.08, 79]} c="#7d8170" />
           <Box p={[x, 0.045, 0]} s={[6.9, 0.05, 79]} c="#535f5e" />
-          {Array.from({ length: 20 }, (_, i) => (
-            <Box key={i} p={[x, 0.08, -38 + i * 4]} s={[0.12, 0.015, 1.6]} c="#a8aa87" />
-          ))}
         </group>
       ))}
       {[-36, 0, 36].map((z) => (
         <group key={"z" + z}>
           <Box p={[0, 0.01, z]} s={[79, 0.08, 8]} c="#7d8170" />
           <Box p={[0, 0.06, z]} s={[79, 0.05, 6.9]} c="#535f5e" />
-          {Array.from({ length: 20 }, (_, i) => (
-            <Box key={i} p={[-38 + i * 4, 0.1, z]} s={[1.6, 0.015, 0.12]} c="#a8aa87" />
-          ))}
         </group>
       ))}
       {[-36, 0, 36].flatMap((x) =>
@@ -191,7 +151,7 @@ function Lamps() {
         <circleGeometry args={[3.8, 16]} />
         <meshBasicMaterial color="#eec779" transparent opacity={0.1} depthWrite={false} />
       </mesh>
-      {i < 5 && (
+      {i < 2 && (
         <pointLight position={[1.2, 4, 0]} color="#ffc77f" intensity={35} distance={13} decay={2} />
       )}
     </group>
@@ -339,10 +299,10 @@ function stepGame(dt: number) {
     g.boost = THREE.MathUtils.clamp(g.boost + (fast ? -22 : 10) * dt, 0, 100);
     if (forward) g.speed += 12 * dt;
     else if (back) g.speed -= 15 * dt;
-    else g.speed *= Math.pow(0.35, dt);
+    else g.speed *= Math.pow(onRoad ? 0.45 : 0.12, dt);
     if (brake) g.speed *= Math.pow(0.006, dt);
     g.speed = THREE.MathUtils.clamp(g.speed, -8, max);
-    g.steer = THREE.MathUtils.lerp(g.steer, turn, dt * 8);
+    g.steer = THREE.MathUtils.lerp(g.steer, turn, 1 - Math.exp(-8 * dt));
     if (Math.abs(g.speed) > 0.1)
       g.angle +=
         g.steer *
@@ -350,14 +310,18 @@ function stepGame(dt: number) {
         Math.min(Math.abs(g.speed) / 5, 1) *
         (g.speed > 0 ? 1 : -1) *
         dt *
-        (brake ? 1.5 : 1);
+        (brake ? 1.5 : 1) *
+        (1 - Math.min(Math.abs(g.speed) / 35, 0.35));
     let nx = g.x - Math.sin(g.angle) * g.speed * dt,
       nz = g.z - Math.cos(g.angle) * g.speed * dt;
     let collision =
       Math.abs(nx) > 53.5 ||
       Math.abs(nz) > 53.5 ||
       buildings.some((b) => Math.abs(nx - b.x) < b.w / 2 + 1 && Math.abs(nz - b.z) < b.d / 2 + 1) ||
-      trees.some(
+      collisionIndex.near(
+        nx,
+        nz,
+        3,
         (t) =>
           Math.abs(nx - t.x) < 2 &&
           Math.abs(nz - t.z) < 2 &&
@@ -381,16 +345,17 @@ function stepGame(dt: number) {
 function DesktopFrameBudget() {
   const { invalidate, size, setDpr } = useThree();
   const desktop = window.pinefallDesktop?.runtime;
+  const graphics = useGraphics();
   useEffect(() => {
     if (desktop)
       setDpr(
         Math.min(
           0.75,
-          desktop.maxRenderWidth / Math.max(size.width, 1),
-          desktop.maxRenderHeight / Math.max(size.height, 1),
+          (desktop.maxRenderWidth * graphics.renderScale) / Math.max(size.width, 1),
+          (desktop.maxRenderHeight * graphics.renderScale) / Math.max(size.height, 1),
         ),
       );
-  }, [desktop, setDpr, size.width, size.height]);
+  }, [desktop, setDpr, size.width, size.height, graphics.renderScale]);
   useEffect(() => {
     if (!desktop) return;
     const timer = setInterval(() => {
@@ -488,22 +453,13 @@ function Scene({ state, onUpdate }: { state: GameSnapshot; onUpdate: UpdateGame 
         shadow-bias={-0.001}
       />
       <Roads />
-      <TreeForest />
+      <TreeForest focus={focus} />
+      <Scenery focus={focus} />
+      <ChimneySmoke />
       {buildings.map((b, i) => (
         <Building key={i} b={b} />
       ))}
-      {rocks.map((r, i) => (
-        <mesh
-          key={i}
-          position={[r.x, r.s * 0.25, r.z]}
-          rotation={[0, i, 0]}
-          castShadow
-          scale={[r.s, r.s * 0.65, r.s]}
-        >
-          <dodecahedronGeometry args={[1, 0]} />
-          <meshStandardMaterial color="#849284" flatShading />
-        </mesh>
-      ))}
+      <BatchedRocks />
       <Lamps />
       <Markers
         target={state.done ? 0 : state.loaded ? JOBS[state.job].to : 0}
@@ -515,6 +471,7 @@ function Scene({ state, onUpdate }: { state: GameSnapshot; onUpdate: UpdateGame 
   );
 }
 function Fireflies() {
+  const settings = useGraphics();
   const ref = useRef<THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>>(null!);
   const points = useMemo(() => {
     let a = [];
@@ -527,7 +484,7 @@ function Fireflies() {
     ref.current.material.opacity = 0.45 + Math.sin(clock.elapsedTime) * 0.2;
   });
   return (
-    <points ref={ref}>
+    <points ref={ref} visible={settings.ambient}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[points, 3]} />
       </bufferGeometry>
@@ -607,6 +564,11 @@ class WorldErrorBoundary extends React.Component<WorldBoundaryProps, { failed: b
   }
 }
 function App() {
+  const graphics = useGraphics();
+  const [hasCheckpoint, setHasCheckpoint] = useState(!!checkpoint);
+  const [saveStatus, setSaveStatus] = useState(
+    checkpoint ? "Checkpoint restored" : "No checkpoint yet",
+  );
   const [initial] = useState(initialRenderer);
   const [renderer, setRenderer] = useState<RendererMode>(initial.mode),
     [backend, setBackend] = useState<RendererInfo>(initial.info),
@@ -748,6 +710,24 @@ function App() {
     if (navigator.gpu && !legacyOpenGLDesktop()) tryVgpu();
     else useCpuRenderer();
   }
+  function checkpointNow() {
+    const ok = saveGame(game);
+    setSaveStatus(ok ? "Checkpoint saved" : "Saving unavailable on this device");
+    if (ok) setHasCheckpoint(true);
+  }
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (game.playing) checkpointNow();
+    }, 10000);
+    const save = () => {
+      if (game.playing) saveGame(game);
+    };
+    window.addEventListener("pagehide", save);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("pagehide", save);
+    };
+  }, []);
   function resetCar() {
     game.x = 0;
     game.z = 28;
@@ -755,6 +735,7 @@ function App() {
     game.speed = 0;
     game.health = 100;
     notify("Back at the depot. Your wagon is ready.");
+    checkpointNow();
   }
   function interact() {
     if (!game.playing || game.paused) return;
@@ -778,24 +759,31 @@ function App() {
       notify(`${JOBS[game.job].cargo} loaded. Drive safe, courier.`);
     } else {
       let job = JOBS[game.job];
-      game.credits += job.pay;
+      const bonus = conditionBonus(game.health, job.pay);
+      game.credits += job.pay + bonus;
       game.deliveries++;
       game.loaded = false;
       if (game.job === JOBS.length - 1) {
         game.done = true;
-        notify("Route complete. The forest is a little brighter tonight.");
+        notify(
+          `Route complete. +${job.pay + bonus} credits. Rank: ${courierRank(game.deliveries)}.`,
+        );
       } else {
         game.job++;
-        notify(`Delivery complete. +${job.pay} credits. Return to the depot.`);
+        notify(
+          `Delivery complete. +${job.pay + bonus} credits (${bonus} careful-driving bonus). Return to the depot.`,
+        );
       }
       game.health = Math.min(100, game.health + 15);
     }
+    checkpointNow();
     setS(snapshotGame(game));
   }
   function togglePause() {
     if (!game.playing) return;
     game.paused = !game.paused;
     setPaused(game.paused);
+    if (game.paused) checkpointNow();
   }
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -875,7 +863,16 @@ function App() {
   const job = JOBS[s.job];
   return (
     <div className={"app " + (started ? "in-game" : "intro")}>
-      <div className={"world " + quality}>
+      <div
+        className={"world " + quality}
+        style={
+          graphics.post && renderer !== "3d"
+            ? {
+                filter: `brightness(${graphics.exposure}) contrast(${graphics.contrast}) saturate(${graphics.saturation})`,
+              }
+            : undefined
+        }
+      >
         {renderer === "vgpu" ? (
           <WorldErrorBoundary
             key={"vgpu" + rendererKey}
@@ -916,14 +913,18 @@ function App() {
               orthographic
               dpr={
                 window.pinefallDesktop
-                  ? Math.min(0.75, 960 / window.innerWidth, 540 / window.innerHeight)
-                  : quality === "pixel"
-                    ? backend.software
-                      ? 0.45
-                      : 0.55
-                    : backend.software
-                      ? 0.8
-                      : 1.5
+                  ? Math.min(
+                      0.75,
+                      (960 * graphics.renderScale) / window.innerWidth,
+                      (540 * graphics.renderScale) / window.innerHeight,
+                    )
+                  : (quality === "pixel"
+                      ? backend.software
+                        ? 0.45
+                        : 0.55
+                      : backend.software
+                        ? 0.8
+                        : 1.5) * graphics.renderScale
               }
               camera={{ position: [23, 37, 62], zoom: 16, near: 0.1, far: 170 }}
               gl={createCompatibleRenderer}
@@ -952,12 +953,16 @@ function App() {
             >
               <DesktopFrameBudget />
               <Scene state={s} onUpdate={setS} />
+              <PostProcessing />
             </Canvas>
           </WorldErrorBoundary>
         )}
       </div>
-      <div className="vignette" />
-      <div className="grain" />
+      <div
+        className="vignette"
+        style={{ opacity: !started ? 1 : graphics.post ? graphics.vignette : 0 }}
+      />
+
       {
         <button
           className="compatibility-badge"
@@ -1039,12 +1044,20 @@ function App() {
                 game.paused = false;
                 setStarted(true);
                 setPaused(false);
-                notify("Welcome to Pinefall. Pull into the gold circle and press E.");
+                notify(
+                  hasCheckpoint
+                    ? "Welcome back. Your route and credits are restored."
+                    : "Welcome to Pinefall. Pull into the gold circle and press E.",
+                );
               }}
             >
-              START YOUR SHIFT <span>↗</span>
+              {hasCheckpoint ? "CONTINUE SHIFT" : "START YOUR SHIFT"} <span>↗</span>
             </button>
-            <div className="start-note">NO CLOCK TO BEAT. JUST THE ROAD AHEAD.</div>
+            <div className="start-note">
+              {hasCheckpoint
+                ? `${courierRank(s.deliveries)} · ${s.deliveries} deliveries · ${s.credits} credits`
+                : "NO CLOCK TO BEAT. JUST THE ROAD AHEAD."}
+            </div>
           </section>
           <div className="intro-footer">
             <div>
@@ -1057,6 +1070,23 @@ function App() {
         </>
       ) : (
         <>
+          <div className="location-label">
+            <span>
+              ⌖{" "}
+              {
+                LANDMARKS.reduce(
+                  (best, p) =>
+                    Math.hypot(s.x - p.x, s.z - p.z) < Math.hypot(s.x - best.x, s.z - best.z)
+                      ? p
+                      : best,
+                  LANDMARKS[0],
+                ).name
+              }
+            </span>
+            <small>
+              {courierRank(s.deliveries)} · {saveStatus}
+            </small>
+          </div>
           <aside className="mission panel">
             <div className="eyebrow">
               NIGHT SHIFT{" "}
@@ -1217,6 +1247,35 @@ function App() {
           <section className="modal">
             <div className="eyebrow">PINEFALL / FIELD GUIDE</div>
             <h2>{paused ? "Take a breather." : "Make yourself at home."}</h2>
+            {paused && (
+              <div className="desktop-graphics-actions">
+                <button onClick={checkpointNow}>SAVE CHECKPOINT</button>
+                <button
+                  onClick={() => {
+                    checkpointNow();
+                    game.playing = false;
+                    game.paused = false;
+                    setStarted(false);
+                    setPaused(false);
+                  }}
+                >
+                  SAVE & RETURN TO TITLE
+                </button>
+                <button
+                  onClick={() => {
+                    setHelp(false);
+                    openRendererSettings();
+                  }}
+                >
+                  GRAPHICS & EFFECTS
+                </button>
+              </div>
+            )}
+            {paused && (
+              <p>
+                {saveStatus} · {courierRank(s.deliveries)} · {s.credits} credits
+              </p>
+            )}
             <p>
               Pick up parcels at the Southbound depot, then follow the diamond on your map. Stop
               inside the glowing circle and press E to make a delivery.
@@ -1299,13 +1358,17 @@ function App() {
             <div className="eyebrow">PINEFALL / GRAPHICS LAB</div>
             <h2>A road for every machine.</h2>
             {window.pinefallDesktop ? (
-              <DesktopGraphicsSettings bridge={window.pinefallDesktop} />
+              <DesktopGraphicsSettings
+                bridge={window.pinefallDesktop}
+                beforeRestart={checkpointNow}
+              />
             ) : (
               <p className="tip">
                 Desktop GPU startup profiles are available in the Electron app. A browser tab cannot
                 change Chromium launch flags; live renderer choices are available below.
               </p>
             )}
+            <RenderSettingsPanel renderer={renderer} />
             <div className="eyebrow">LIVE SETTINGS / NO RESTART</div>
             <p>
               Switch the scene renderer without losing your shift. Desktop startup profiles still

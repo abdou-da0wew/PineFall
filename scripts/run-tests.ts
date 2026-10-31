@@ -2,6 +2,7 @@ import { projectRoot } from "./test-support.ts";
 import { errorMessage } from "../src/types.ts";
 
 const suites: Record<string, string[]> = {
+  polish: ["test-polish-browser.ts"],
   cpu: ["test-compatibility.ts", "test-errors.ts", "test-vgpu-fallback.ts"],
   webgl: ["check.ts", "test-renderers.ts"],
   webgpu: ["test-vgpu-browser.ts", "test-vgpu-loss.ts"],

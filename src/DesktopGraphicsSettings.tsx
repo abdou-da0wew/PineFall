@@ -40,7 +40,13 @@ const profiles: ReadonlyArray<{
       "--use-gl=angle --use-angle=gl --ozone-platform=x11 --disable-features=Vulkan --disable-accelerated-video-decode --ignore-gpu-blocklist",
   },
 ];
-export default function DesktopGraphicsSettings({ bridge }: { bridge: DesktopBridge }) {
+export default function DesktopGraphicsSettings({
+  bridge,
+  beforeRestart,
+}: {
+  bridge: DesktopBridge;
+  beforeRestart?: () => void;
+}) {
   const [selected, setSelected] = useState<GraphicsMode>(bridge.runtime.mode);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -49,6 +55,7 @@ export default function DesktopGraphicsSettings({ bridge }: { bridge: DesktopBri
     setBusy(true);
     setMessage("Waiting for restart confirmation…");
     try {
+      beforeRestart?.();
       await bridge.setGraphicsMode(selected);
       setMessage("Restart canceled. Your running profile is unchanged.");
     } catch (error) {

@@ -1,3 +1,4 @@
+import manifest from "../package.json";
 import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopBridge, GraphicsMode } from "./contracts";
 import { isGraphicsMode } from "./graphics";
@@ -7,7 +8,7 @@ const bridge: DesktopBridge = {
   runtime: Object.freeze({
     mode,
     platform: process.platform,
-    version: "1.0.0",
+    version: manifest.version,
     targetFps: 30,
     maxRenderWidth: 960,
     maxRenderHeight: 540,

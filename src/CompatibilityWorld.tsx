@@ -1,3 +1,5 @@
+import { getGraphics } from "./graphicsSettings";
+import { SCENERY } from "./WorldScenery";
 import { recordFrame } from "./telemetry";
 import type { RenderLoopProps, Tree, BuildingData, Rock, Vec2, Stop, Job } from "./types";
 import { snapshotGame } from "./types";
@@ -10,6 +12,7 @@ type Props = RenderLoopProps & {
   jobs: Job[];
 };
 type RenderObject =
+  | { type: "scenery"; x: number; z: number; prop: (typeof SCENERY)[number] }
   | ({ type: "tree" } & Tree)
   | ({ type: "building" } & BuildingData)
   | { type: "lamp" | "car" | "marker"; x: number; z: number };
@@ -47,6 +50,7 @@ export default function CompatibilityWorld({
     let nextRender = performance.now();
     let reportedReady = false;
     const staticObjects: RenderObject[] = [
+      ...SCENERY.map((prop) => ({ type: "scenery" as const, x: prop.x, z: prop.z, prop })),
       ...trees.map((t) => ({ type: "tree" as const, ...t })),
       ...buildings.map((b) => ({ type: "building" as const, ...b })),
       ...lamps.map(([x, z]) => ({ type: "lamp" as const, x, z })),
@@ -54,13 +58,37 @@ export default function CompatibilityWorld({
     const movingCar: RenderObject = { type: "car", x: game.x, z: game.z };
     const movingMarker: RenderObject = { type: "marker", x: 0, z: 35 };
     const objects: RenderObject[] = new Array(staticObjects.length + 2);
+    let visibleObjects = staticObjects,
+      cacheX = NaN,
+      cacheZ = NaN,
+      cacheDistance = NaN,
+      cacheCulling = true,
+      objectCount = 0;
     function orderObjects() {
+      const s = getGraphics();
+      if (
+        !Number.isFinite(cacheX) ||
+        Math.abs(cx - cacheX) > 3 ||
+        Math.abs(cz - cacheZ) > 3 ||
+        cacheDistance !== s.drawDistance ||
+        cacheCulling !== s.culling
+      ) {
+        visibleObjects = s.culling
+          ? staticObjects.filter(
+              (o) => (o.x - cx) ** 2 + (o.z - cz) ** 2 < (s.drawDistance + 16) ** 2,
+            )
+          : staticObjects;
+        cacheX = cx;
+        cacheZ = cz;
+        cacheDistance = s.drawDistance;
+        cacheCulling = s.culling;
+      }
       const first =
         movingCar.x + movingCar.z <= movingMarker.x + movingMarker.z ? movingCar : movingMarker;
       const second = first === movingCar ? movingMarker : movingCar;
       let written = 0,
         inserted = 0;
-      for (const item of staticObjects) {
+      for (const item of visibleObjects) {
         if (inserted === 0 && first.x + first.z <= item.x + item.z) {
           objects[written++] = first;
           inserted = 1;
@@ -72,7 +100,8 @@ export default function CompatibilityWorld({
         objects[written++] = item;
       }
       if (inserted === 0) objects[written++] = first;
-      if (inserted < 2) objects[written] = second;
+      if (inserted < 2) objects[written++] = second;
+      objectCount = written;
     }
     let frame = 0,
       last = performance.now(),
@@ -82,6 +111,7 @@ export default function CompatibilityWorld({
       w = 1,
       h = 1,
       ratio = 1;
+    let currentScale = getGraphics().renderScale;
     function resize() {
       ratio = quality === "pixel" ? 0.55 : Math.min(devicePixelRatio || 1, 1.5);
       if (desktop)
@@ -90,6 +120,8 @@ export default function CompatibilityWorld({
           desktop.maxRenderWidth / Math.max(1, canvas.clientWidth),
           desktop.maxRenderHeight / Math.max(1, canvas.clientHeight),
         );
+      currentScale = getGraphics().renderScale;
+      ratio *= currentScale;
       w = canvas.clientWidth * ratio;
       h = canvas.clientHeight * ratio;
       canvas.width = Math.max(1, Math.round(w));
@@ -116,6 +148,8 @@ export default function CompatibilityWorld({
         window.pinefallDesktop?.ready();
         reportedReady = true;
       }
+      const settings = getGraphics();
+      if (currentScale !== settings.renderScale) resize();
       const dt = Math.min((now - last) / 1000, 0.1);
       last = now;
       advanceGame(dt);
@@ -232,11 +266,40 @@ export default function CompatibilityWorld({
       movingMarker.x = stop.x;
       movingMarker.z = stop.z;
       orderObjects();
-      for (const o of objects) {
+      for (let objectIndex = 0; objectIndex < objectCount; objectIndex++) {
+        const o = objects[objectIndex];
+        if (o.type === "scenery" && !settings.scenery) continue;
         let [px, py] = p(o.x, o.z);
         if (px < -150 * ratio || px > w + 150 * ratio || py < -100 * ratio || py > h + 200 * ratio)
           continue;
-        if (o.type === "tree") {
+        if (o.type === "scenery") {
+          const prop = o.prop;
+          if (prop.kind === "sign") {
+            line(p(o.x, o.z), p(o.x, o.z, 2.3), "#6e6856", 3);
+            polygon(
+              [
+                p(o.x - 1.5, o.z, 2.6),
+                p(o.x + 1.5, o.z, 2.6),
+                p(o.x + 1.9, o.z, 2.2),
+                p(o.x + 1.5, o.z, 1.9),
+                p(o.x - 1.5, o.z, 1.9),
+              ],
+              prop.color,
+            );
+          } else if (prop.kind === "bench") {
+            cube(o.x, o.z, 2.6, 0.9, 0.18, prop.color, "#76604e", "#5a594c", 0.6);
+            cube(o.x, o.z + 0.4, 2.6, 0.15, 0.7, prop.color, "#76604e", "#5a594c", 1);
+          } else if (prop.kind === "mailbox") {
+            cube(o.x, o.z, 0.2, 0.2, 1.4, "#72664f", "#635b47", "#4c5041");
+            cube(o.x, o.z, 0.9, 0.65, 0.6, prop.color, "#746c5b", "#565f52", 1.4);
+          } else {
+            polygon(
+              [p(o.x - 2, o.z - 2), p(o.x + 2, o.z - 2), p(o.x + 2, o.z + 2), p(o.x, o.z, 2)],
+              prop.color,
+            );
+            polygon([p(o.x + 2, o.z + 2), p(o.x - 2, o.z + 2), p(o.x, o.z, 2)], "#807657");
+          }
+        } else if (o.type === "tree") {
           ctx.fillStyle = "#183c3439";
           ctx.beginPath();
           ctx.ellipse(
@@ -390,7 +453,7 @@ export default function CompatibilityWorld({
           }
         }
       }
-      for (let i = 0; i < 40; i++) {
+      for (let i = 0; i < (settings.ambient ? 24 : 0); i++) {
         const x = Math.sin(i * 231.3) * 52,
           z = Math.cos(i * 127.7) * 52;
         let [px, py] = p(x, z, 2 + Math.sin(now * 0.001 + i) * 0.5);

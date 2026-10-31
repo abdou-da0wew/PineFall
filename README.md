@@ -8,9 +8,9 @@ An atmospheric, top-down 3D driving game made with React Three Fiber, React, and
 
 ### Install and play
 
-- **Linux x86-64:** download `Pinefall-1.0.0-linux-x86_64.AppImage`, run `chmod +x Pinefall-1.0.0-linux-x86_64.AppImage`, then launch it. A modern 64-bit Linux desktop with Electron's GTK/NSS/system-library dependencies is required. If FUSE is unavailable, use `./Pinefall-1.0.0-linux-x86_64.AppImage --appimage-extract-and-run`. Keep Chromium's OS sandbox enabled; do not run as root or use `--no-sandbox` as a normal workaround. Distributions that restrict user namespaces may need administrator-approved sandbox configuration or a locally packaged installation.
-- **Windows x64:** extract the entire `Pinefall-1.0.0-win-x64.zip`, then run `Pinefall.exe` from that folder. Do not copy the EXE alone. Target a current supported Windows 10/11 environment, not Windows 7/8. These development packages are **unsigned**, so Windows may show a publisher warning. Only run a build whose origin you trust.
-- The game and fonts are bundled locally; no web server or network connection is needed to play. Progress is session-only.
+- **Linux x86-64:** download `Pinefall-1.1.0-linux-x86_64.AppImage`, run `chmod +x Pinefall-1.1.0-linux-x86_64.AppImage`, then launch it. A modern 64-bit Linux desktop with Electron's GTK/NSS/system-library dependencies is required. If FUSE is unavailable, use `./Pinefall-1.1.0-linux-x86_64.AppImage --appimage-extract-and-run`. Keep Chromium's OS sandbox enabled; do not run as root or use `--no-sandbox` as a normal workaround. Distributions that restrict user namespaces may need administrator-approved sandbox configuration or a locally packaged installation.
+- **Windows x64:** extract the entire `Pinefall-1.1.0-win-x64.zip`, then run `Pinefall.exe` from that folder. Do not copy the EXE alone. Target a current supported Windows 10/11 environment, not Windows 7/8. These development packages are **unsigned**, so Windows may show a publisher warning. Only run a build whose origin you trust.
+- The game and fonts are bundled locally; no web server or network connection is needed to play. Progress now uses validated local checkpoints (see the gameplay/polish section).
 
 ### Graphics and recovery
 
@@ -18,7 +18,7 @@ An atmospheric, top-down 3D driving game made with React Three Fiber, React, and
 - Compatibility Mode skips costly backdrop blur/grain. Static Canvas depth order is cached rather than sorted every frame; physics uses bounded substeps; camera vectors are reused; audio/timers/observers/render loops clean up on teardown.
 - **Graphics → Hardware · experimental** requires explicit confirmation and a restart (ending the current shift). Chromium's GPU blocklist remains enabled. R3F shadows are disabled for desktop hardware mode, with capped resolution and a 30 FPS invalidation target. Actual hardware rendering depends on the adapter/driver: software or CPU fallback can still occur. **The HD 6350 is not assumed to support current WebGL 2 or WebGPU.** vgpu is still the actual Vercel WebGPU library, not a legacy-driver compatibility layer.
 - A failed hardware startup is remembered and the next launch recovers to Compatibility Mode. GPU-process/renderer crashes offer a safe restart; detected hardware-mode crashes save safe mode for the next launch. Native driver/OS hangs can still prevent an orderly recovery.
-- Emergency launch: `./Pinefall-1.0.0-linux-x86_64.AppImage --safe-mode` or `Pinefall.exe --safe-mode`. This overrides the saved graphics preference for that launch.
+- Emergency launch: `./Pinefall-1.1.0-linux-x86_64.AppImage --safe-mode` or `Pinefall.exe --safe-mode`. This overrides the saved graphics preference for that launch.
 - **Graphics → Export diagnostics…** saves Electron/Chromium versions, graphics feature status, process memory/CPU snapshots and a bounded desktop log. Adapter information is queried only in hardware mode. Review the JSON before sharing it; driver strings and error messages can contain system details. No file is uploaded.
 
 ### Build with Bun
@@ -85,7 +85,7 @@ Start your shift, then press **E** at the golden depot marker to load the first 
 - R: recover at the depot and repair (cargo retained)
 - Escape: pause / resume
 
-Touch controls appear on narrow screens. Engine sound is optional. The toolbar toggles pixel / crisp rendering. Roads allow faster driving than grass. Trees, buildings, and forest boundaries block the vehicle; collisions affect the condition meter. Progress is session-only.
+Touch controls appear on narrow screens. Engine sound is optional. The toolbar toggles pixel / crisp rendering. Roads allow faster driving than grass. Trees, buildings, and forest boundaries block the vehicle; collisions affect the condition meter. Progress now uses validated local checkpoints (see the gameplay/polish section).
 
 ## Implementation
 
@@ -202,11 +202,11 @@ If the regular profile refuses WebGL, try **Linux GPU · OpenGL / X11 · bypass 
 One-launch test (fully close the existing app first):
 
 ```sh
-./Pinefall-1.0.0-linux-x86_64.AppImage --graphics=linux-opengl
+./Pinefall-1.1.0-linux-x86_64.AppImage --graphics=linux-opengl
 # Only if the normal profile is refused:
-./Pinefall-1.0.0-linux-x86_64.AppImage --graphics=linux-opengl-unblocked
+./Pinefall-1.1.0-linux-x86_64.AppImage --graphics=linux-opengl-unblocked
 # Recovery:
-./Pinefall-1.0.0-linux-x86_64.AppImage --safe-mode
+./Pinefall-1.1.0-linux-x86_64.AppImage --safe-mode
 ```
 
 From source, run `bun run desktop:install`, `bun run desktop:prepare`, then `bun scripts/start-desktop.ts --graphics=linux-opengl`. CLI profile overrides apply for that launch; choosing another menu profile clears the CLI override on restart.
@@ -244,7 +244,45 @@ This fixes the startup ordering/configuration path; it does **not** establish th
 One-line diagnostic launch (fully close other instances first):
 
 ```sh
-env -u WAYLAND_DISPLAY GDK_BACKEND=x11 ./Pinefall-1.0.0-linux-x86_64.AppImage --ozone-platform=x11 --use-gl=angle --use-angle=gl --disable-features=Vulkan --disable-accelerated-video-decode --graphics=linux-opengl --enable-logging=stderr 2>&1 | tee -a pinefall-native-x11.log
+env -u WAYLAND_DISPLAY GDK_BACKEND=x11 ./Pinefall-1.1.0-linux-x86_64.AppImage --ozone-platform=x11 --use-gl=angle --use-angle=gl --disable-features=Vulkan --disable-accelerated-video-decode --graphics=linux-opengl --enable-logging=stderr 2>&1 | tee -a pinefall-native-x11.log
 ```
 
 Keep `DISPLAY` set; this requires a working X server or XWayland. An existing failed-startup marker may still select CPU recovery on the first attempt. The absence of a successful GPU-startup report is not evidence of a working GPU.
+
+## 1.1 · Gameplay, rendering and world polish
+
+### Courier progression and driving
+
+- Automatic local checkpoints every 10 seconds while a shift is active, after pickup/delivery/recovery, on pause, and on page exit where possible. The in-game profile-apply button checkpoints before requesting a restart. The pause menu adds manual save, save-and-return-to-title, and Graphics & Effects access. **Continue Shift** restores route/cargo/credits/condition/position while clearing speed and held inputs.
+- Three courier ranks based on completed deliveries; delivery condition bonuses range from zero to 15% of base pay. Existing three missions remain; this is not a new campaign or vehicle-upgrade system.
+- Smoother steering response, reduced high-speed steering sensitivity, stronger off-road coasting resistance. A spatial collision index replaces the full tree-array scan at every physics substep. Collision behavior remains independent of visual culling.
+- Checkpoints/settings use localStorage for this browser/Electron storage origin; they are not cloud saves or a portable save format. Storage denial, clearing profile data, or a hard crash before a checkpoint can lose progress. Settings persist in `pinefall.graphics.v1`; progress in `pinefall.courier.v1`. Invalid/out-of-range progress is rejected. Existing pre-1.1 session-only progress cannot be recovered retroactively.
+
+### Rendering and scenery
+
+- WebGL forest instances are partitioned into 18-unit spatial cells with computed bounds, regular Three.js frustum culling, distance rejection and two-level foliage detail with hysteresis. Road markings are one instanced batch instead of 120 separate meshes; rocks are instanced. Building point lights were removed and lamp point lights reduced to two; emissive windows and lamp pools remain.
+- Canvas caches the distance-filtered, pre-sorted static-object list as the camera moves and performs viewport rejection before drawing. The mission marker and car are not removed by the distance filter. Small distance settings can reveal scenery popping: raise draw distance if distracting.
+- New decorative road signs, benches, mailboxes and campsite props in Canvas/WebGL; location labels in the HUD; optional WebGL chimney smoke and ambient fireflies. Props are decorative and do not add physics colliders.
+- These changes reduce particular rendering/physics workloads, not a measured universal FPS improvement. Chunking can trade extra draw calls for fewer submitted trees. The physical CEDAR card remains untested.
+
+### In-game live controls
+
+Open **Renderer → Performance / World / Post-processing**. Choose the performance or atmosphere preset, or adjust distance culling, draw distance, tree-detail distance, render-resolution scale, scenery and ambience. Performance defaults leave post-processing **off**. Ordinary Three.js frustum culling stays enabled even when custom distance culling is disabled. Desktop resolution scaling stays below the existing 960 × 540 cap; it does not unlock unlimited VRAM use.
+
+WebGL post-processing adds an optional color-grade pass and inexpensive five-tap glow with normalized luminance threshold (0.05–1), intensity, exposure, contrast and saturation. It uses 8-bit render targets rather than requiring HDR floating-point attachments. This is **not** full multi-pass bloom. Vignette is an adjustable overlay. No SSAO, motion blur, temporal AA or depth-of-field is enabled. Targets/passes are disposed when disabled or unmounted.
+
+Canvas and experimental vgpu use optional display color filters/vignette, not the WebGL compositor. The new culling/detail/scenery/resolution controls are not implemented in vgpu and are disabled there; shared gameplay/checkpoints still work. Controls indicate backend support instead of silently claiming parity. Effects and CSS filters can still cost frame time, especially under CPU rendering—use Performance Preset to reset them.
+
+Validation: strict TypeScript/Oxlint/Oxfmt; collision-index equivalence over 600 positions; save validation/bonuses; actual Canvas and SwiftShader WebGL play, live resolution changes, post-effect toggles, save/reload and a delivery with condition bonus; browser CPU/WebGL/WebGPU/device-loss regression suites. Windows runtime, a real CEDAR GPU, long-session memory stability and hardware FPS gains are not certified by these tests.
+
+## Workspace retention and cleanup
+
+The workspace exceeded its snapshot budget primarily because a **102.34 MiB Bun executable** lived outside excluded cache directories. It has been moved to `/home/user/.cache/pinefall-tools/bun`, with the usual command path symlinked to it. Redundant historical source archives were moved into excluded `build/archive/`. Source files, Git history and the separate uploaded-logs checkout were preserved. The starting tracked commit matched GitHub `main` and passed `git fsck`; no re-clone was necessary. Eligible data dropped from **134.76 MiB to 26.15 MiB** before this feature pass.
+
+Generated packages, source ZIPs and test evidence now belong under `build/` (test results: `build/test-results/`), and dependencies/browser downloads/tool binaries belong in excluded directories. Those files are **rebuildable, not guaranteed to survive a workspace restore**. Do not treat a workspace download URL as permanent artifact hosting; use an uploaded GitHub release for durable downloads. If Bun's cache is gone after restore, reinstall Bun 1.4.4 into an excluded cache location instead of placing its 103 MiB binary back in snapshot-eligible storage.
+
+```sh
+bun run workspace:budget /home/user
+```
+
+The read-only budget audit follows the workspace exclusion names, ignores symlinks/credential files and reports the largest eligible files. It fails above a conservative 100 MiB / 9,000-file guard, leaving headroom under the approximate platform cap. It never deletes source or logs. `bun run test:polish` runs the new gameplay/rendering checks.

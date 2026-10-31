@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 export const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const outputDir = process.env.TEST_ARTIFACT_DIR || join(projectRoot, "artifacts", "tests");
+const outputDir = process.env.TEST_ARTIFACT_DIR || join(projectRoot, "build", "test-results");
 export function artifact(name: string) {
   mkdirSync(outputDir, { recursive: true });
   return join(outputDir, name);

@@ -1,6 +1,6 @@
 {
   "name": "pinefall-night-courier",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "bun --bun vite --host 0.0.0.0",
@@ -28,7 +28,9 @@
     "test:graphics": "bun test ./test-graphics-profile.ts",
     "test:linux-gpu": "bun test-linux-opengl.ts",
     "test:observability": "bun test ./test-observability.ts",
-    "test:native-bootstrap": "bun test-native-bootstrap.ts"
+    "test:native-bootstrap": "bun test-native-bootstrap.ts",
+    "test:polish": "bun test ./test-game-polish.ts && bun scripts/run-tests.ts polish",
+    "workspace:budget": "bun scripts/workspace-budget.ts"
   },
   "dependencies": {
     "@fontsource/dm-sans": "5.3.0",

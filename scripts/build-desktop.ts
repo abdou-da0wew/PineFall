@@ -1,3 +1,4 @@
+import manifest from "../package.json";
 import { cp, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { projectRoot } from "./test-support";
@@ -24,7 +25,7 @@ await Bun.write(
     {
       name: "pinefall-night-courier",
       productName: "Pinefall",
-      version: "1.0.0",
+      version: manifest.version,
       description: "An atmospheric forest courier driving game",
       author: { name: "abdou-da0wew" },
       main: "main.cjs",

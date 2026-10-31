@@ -24,6 +24,7 @@ jobs:
       - run: bun run check
       - run: bun run test:graphics
       - run: bun run test:observability
+      - run: bun test ./test-game-polish.ts
       - run: bun run desktop:install
       - run: bun run desktop:prepare
       - if: runner.os == 'Linux'
